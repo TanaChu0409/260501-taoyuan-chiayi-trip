@@ -1,2 +1,11 @@
 .DS_Store
 Thumbs.db
+.env
+app/.dart_tool/
+app/.packages
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.pub/
+app/build/
+app/.idea/
+app/.metadata
