@@ -92,7 +92,7 @@ class TripDetailScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
-                            trip.dateRange,
+                            trip.displayDateRange,
                             style: const TextStyle(
                               color: AppColors.accentStrong,
                               fontWeight: FontWeight.w700,
@@ -147,9 +147,9 @@ class TripDetailScreen extends StatelessWidget {
   Future<void> _handleAction(BuildContext context, _TripDetailAction action) async {
     switch (action) {
       case _TripDetailAction.deleteTrip:
-        await _deleteTrip(context);
+        return _deleteTrip(context);
       case _TripDetailAction.leaveTrip:
-        await _leaveTrip(context);
+        return _leaveTrip(context);
     }
   }
 
@@ -178,18 +178,24 @@ class TripDetailScreen extends StatelessWidget {
       return;
     }
 
-    final deleted = TripStore.instance.deleteTrip(trip.id);
-    if (!context.mounted) {
-      return;
-    }
+    try {
+      final deleted = await TripStore.instance.deleteTrip(trip.id);
+      if (!context.mounted) {
+        return;
+      }
 
-    if (deleted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已刪除旅程：${trip.title}')));
-      context.go('/trips');
-      return;
-    }
+      if (deleted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已刪除旅程：${trip.title}')));
+        context.go('/trips');
+        return;
+      }
 
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('刪除旅程失敗')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('刪除旅程失敗')));
+    } on TripStoreException catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    }
   }
 
   Future<void> _leaveTrip(BuildContext context) async {
@@ -216,18 +222,24 @@ class TripDetailScreen extends StatelessWidget {
       return;
     }
 
-    final left = TripStore.instance.leaveSharedTrip(trip.id);
-    if (!context.mounted) {
-      return;
-    }
+    try {
+      final left = await TripStore.instance.leaveSharedTrip(trip.id);
+      if (!context.mounted) {
+        return;
+      }
 
-    if (left) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已退出旅程：${trip.title}')));
-      context.go('/trips');
-      return;
-    }
+      if (left) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已退出旅程：${trip.title}')));
+        context.go('/trips');
+        return;
+      }
 
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('退出旅程失敗')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('退出旅程失敗')));
+    } on TripStoreException catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    }
   }
 }
 

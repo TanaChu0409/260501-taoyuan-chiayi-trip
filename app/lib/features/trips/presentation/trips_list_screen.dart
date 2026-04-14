@@ -4,6 +4,7 @@ import 'package:trip_planner_app/core/theme/app_theme.dart';
 import 'package:trip_planner_app/features/trips/data/models/trip_model.dart';
 import 'package:trip_planner_app/features/trips/data/trip_store.dart';
 import 'package:trip_planner_app/features/trips/presentation/widgets/trip_card.dart';
+import 'package:trip_planner_app/features/trips/presentation/widgets/trip_editor_sheet.dart';
 
 class TripsListScreen extends StatefulWidget {
   const TripsListScreen({super.key});
@@ -41,7 +42,7 @@ class _TripsListScreenState extends State<TripsListScreen> {
 
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showCreateTripSheet(context),
+        onPressed: _tripStore.isLoading ? null : () => _showTripEditorSheet(context),
         backgroundColor: AppColors.accent,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add_rounded),
@@ -56,60 +57,83 @@ class _TripsListScreenState extends State<TripsListScreen> {
           ),
         ),
         child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 96),
-            children: [
-              Text('桃園嘉義行動導覽', style: Theme.of(context).textTheme.headlineLarge),
-              const SizedBox(height: 12),
-              const Text('第一版先把旅程列表、唯讀分享、時間軸明細與導航模式框架建起來。'),
-              const SizedBox(height: 24),
-              _HeroPanel(ownedTrips: ownedTrips),
-              const SizedBox(height: 24),
-              _SectionHeader(
-                title: '我的旅程',
-                actionLabel: '邀請碼加入',
-                onPressed: () => _showJoinTripSheet(context),
-              ),
-              const SizedBox(height: 12),
-              for (final trip in ownedTrips) ...[
-                TripCard(
-                  trip: trip,
-                  onTap: () => context.go('/trips/${trip.id}'),
-                  onActionSelected: (action) => _handleTripAction(context, trip, action),
+          child: _tripStore.isLoading && trips.isEmpty
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 96),
+                  children: [
+                    Text('桃園嘉義行動導覽', style: Theme.of(context).textTheme.headlineLarge),
+                    const SizedBox(height: 12),
+                    const Text('目前已接上 Supabase 旅程同步，Owner 可直接建立、編輯、刪除旅程。'),
+                    const SizedBox(height: 16),
+                    _StatusBanner(
+                      isRemoteActive: _tripStore.isRemoteActive,
+                      isLoading: _tripStore.isLoading,
+                      message: _tripStore.statusMessage,
+                    ),
+                    const SizedBox(height: 24),
+                    _HeroPanel(ownedTrips: ownedTrips),
+                    const SizedBox(height: 24),
+                    _SectionHeader(
+                      title: '我的旅程',
+                      actionLabel: '邀請碼加入',
+                      onPressed: _tripStore.isLoading ? null : () => _showJoinTripSheet(context),
+                    ),
+                    const SizedBox(height: 12),
+                    if (ownedTrips.isEmpty)
+                      const _EmptySection(
+                        title: '還沒有自己的旅程',
+                        description: '按右下角的「新增旅程」後，會同步建立到 Supabase。',
+                      )
+                    else
+                      for (final trip in ownedTrips) ...[
+                        TripCard(
+                          trip: trip,
+                          onTap: () => context.go('/trips/${trip.id}'),
+                          onActionSelected: (action) => _handleTripAction(context, trip, action),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    const SizedBox(height: 16),
+                    const _SectionHeader(title: '分享給我的'),
+                    const SizedBox(height: 12),
+                    if (sharedTrips.isEmpty)
+                      const _EmptySection(
+                        title: '尚未加入任何共享旅程',
+                        description: '輸入 6 碼邀請碼後，會把唯讀旅程加到這裡。',
+                      )
+                    else
+                      for (final trip in sharedTrips) ...[
+                        TripCard(
+                          trip: trip,
+                          onTap: () => context.go('/trips/${trip.id}'),
+                          onActionSelected: (action) => _handleTripAction(context, trip, action),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                  ],
                 ),
-                const SizedBox(height: 12),
-              ],
-              const SizedBox(height: 16),
-              const _SectionHeader(title: '分享給我的'),
-              const SizedBox(height: 12),
-              for (final trip in sharedTrips) ...[
-                TripCard(
-                  trip: trip,
-                  onTap: () => context.go('/trips/${trip.id}'),
-                  onActionSelected: (action) => _handleTripAction(context, trip, action),
-                ),
-                const SizedBox(height: 12),
-              ],
-            ],
-          ),
         ),
       ),
     );
   }
 
-  Future<void> _showCreateTripSheet(BuildContext context) async {
-    final createdTrip = await showModalBottomSheet<TripSummary>(
+  Future<void> _showTripEditorSheet(
+    BuildContext context, {
+    TripSummary? initialTrip,
+  }) async {
+    final trip = await showModalBottomSheet<TripSummary>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => const _CreateTripSheet(),
+      builder: (context) => TripEditorSheet(initialTrip: initialTrip),
     );
 
-    if (!context.mounted || createdTrip == null) {
+    if (!context.mounted || trip == null) {
       return;
     }
 
-    context.go('/trips/${createdTrip.id}');
+    context.go('/trips/${trip.id}');
   }
 
   Future<void> _handleTripAction(
@@ -118,10 +142,12 @@ class _TripsListScreenState extends State<TripsListScreen> {
     TripCardAction action,
   ) async {
     switch (action) {
+      case TripCardAction.editTrip:
+        return _showTripEditorSheet(context, initialTrip: trip);
       case TripCardAction.deleteTrip:
-        await _confirmDeleteTrip(context, trip);
+        return _confirmDeleteTrip(context, trip);
       case TripCardAction.leaveTrip:
-        await _confirmLeaveTrip(context, trip);
+        return _confirmLeaveTrip(context, trip);
     }
   }
 
@@ -150,12 +176,17 @@ class _TripsListScreenState extends State<TripsListScreen> {
       return;
     }
 
-    final deleted = _tripStore.deleteTrip(trip.id);
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(content: Text(deleted ? '已刪除旅程：${trip.title}' : '刪除旅程失敗')),
-    );
+    try {
+      final deleted = await _tripStore.deleteTrip(trip.id);
+      if (!context.mounted) {
+        return;
+      }
+      _showMessage(context, deleted ? '已刪除旅程：${trip.title}' : '刪除旅程失敗');
+    } on TripStoreException catch (error) {
+      if (context.mounted) {
+        _showMessage(context, error.message);
+      }
+    }
   }
 
   Future<void> _confirmLeaveTrip(BuildContext context, TripSummary trip) async {
@@ -182,12 +213,17 @@ class _TripsListScreenState extends State<TripsListScreen> {
       return;
     }
 
-    final left = _tripStore.leaveSharedTrip(trip.id);
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(content: Text(left ? '已退出旅程：${trip.title}' : '退出旅程失敗')),
-    );
+    try {
+      final left = await _tripStore.leaveSharedTrip(trip.id);
+      if (!context.mounted) {
+        return;
+      }
+      _showMessage(context, left ? '已退出旅程：${trip.title}' : '退出旅程失敗');
+    } on TripStoreException catch (error) {
+      if (context.mounted) {
+        _showMessage(context, error.message);
+      }
+    }
   }
 
   void _showJoinTripSheet(BuildContext context) {
@@ -198,163 +234,59 @@ class _TripsListScreenState extends State<TripsListScreen> {
       builder: (context) => const _JoinTripSheet(),
     );
   }
-}
 
-class _CreateTripSheet extends StatefulWidget {
-  const _CreateTripSheet();
-
-  @override
-  State<_CreateTripSheet> createState() => _CreateTripSheetState();
-}
-
-class _CreateTripSheetState extends State<_CreateTripSheet> {
-  final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  DateTime _startDate = DateTime(2026, 5, 1);
-  DateTime _endDate = DateTime(2026, 5, 3);
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-        decoration: const BoxDecoration(
-          color: Color(0xFFF6FAFF),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('新增旅程', style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 8),
-              const Text('先建立旅程基本資料，後續再補停靠點與提醒。'),
-              const SizedBox(height: 18),
-              TextFormField(
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: '旅程名稱',
-                  hintText: '例如 台南兩天一夜',
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return '請輸入旅程名稱';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 14),
-              _DateField(
-                label: '開始日期',
-                value: _formatDate(_startDate),
-                onTap: () => _pickDate(isStartDate: true),
-              ),
-              const SizedBox(height: 12),
-              _DateField(
-                label: '結束日期',
-                value: _formatDate(_endDate),
-                onTap: () => _pickDate(isStartDate: false),
-              ),
-              const SizedBox(height: 18),
-              FilledButton(
-                onPressed: _submit,
-                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-                child: const Text('建立旅程'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickDate({required bool isStartDate}) async {
-    final initialDate = isStartDate ? _startDate : _endDate;
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: initialDate,
-      firstDate: DateTime(2025, 1, 1),
-      lastDate: DateTime(2030, 12, 31),
-    );
-
-    if (picked == null) {
-      return;
-    }
-
-    setState(() {
-      if (isStartDate) {
-        _startDate = picked;
-        if (_endDate.isBefore(_startDate)) {
-          _endDate = _startDate;
-        }
-      } else {
-        _endDate = picked.isBefore(_startDate) ? _startDate : picked;
-      }
-    });
-  }
-
-  void _submit() {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    final trip = TripStore.instance.createTrip(
-      title: _titleController.text.trim(),
-      startDate: _startDate,
-      endDate: _endDate,
-    );
-
-    Navigator.of(context).pop(trip);
-  }
-
-  String _formatDate(DateTime value) {
-    final month = value.month.toString().padLeft(2, '0');
-    final day = value.day.toString().padLeft(2, '0');
-    return '${value.year}/$month/$day';
+  void _showMessage(BuildContext context, String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
-class _DateField extends StatelessWidget {
-  const _DateField({
-    required this.label,
-    required this.value,
-    required this.onTap,
+class _StatusBanner extends StatelessWidget {
+  const _StatusBanner({
+    required this.isRemoteActive,
+    required this.isLoading,
+    required this.message,
   });
 
-  final String label;
-  final String value;
-  final VoidCallback onTap;
+  final bool isRemoteActive;
+  final bool isLoading;
+  final String? message;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: InputDecorator(
-        decoration: InputDecoration(labelText: label),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                value,
-                style: const TextStyle(
-                  color: AppColors.text,
-                  fontWeight: FontWeight.w600,
-                ),
+    final backgroundColor = isRemoteActive ? const Color(0xFFE8F7EE) : const Color(0xFFFFF3E2);
+    final foregroundColor = isRemoteActive ? const Color(0xFF1E7A4E) : const Color(0xFF8A5A00);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isRemoteActive ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
+            color: foregroundColor,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message ?? (isRemoteActive ? 'Supabase 已連線。' : '目前使用示範資料。'),
+              style: TextStyle(
+                color: foregroundColor,
+                fontWeight: FontWeight.w700,
               ),
             ),
-            const Icon(Icons.calendar_today_outlined, size: 18),
-          ],
-        ),
+          ),
+          if (isLoading)
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+        ],
       ),
     );
   }
@@ -412,7 +344,7 @@ class _HeroPanel extends StatelessWidget {
             children: [
               _SummaryCard(value: '${ownedTrips.length}', label: '我的旅程'),
               _SummaryCard(value: '$totalStops', label: '已整理停靠點'),
-              const _SummaryCard(value: '2', label: '支援提醒模式'),
+              const _SummaryCard(value: 'Supabase', label: '同步模式'),
             ],
           ),
         ],
@@ -479,8 +411,51 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _JoinTripSheet extends StatelessWidget {
+class _EmptySection extends StatelessWidget {
+  const _EmptySection({
+    required this.title,
+    required this.description,
+  });
+
+  final String title;
+  final String description;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.74),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Text(description),
+        ],
+      ),
+    );
+  }
+}
+
+class _JoinTripSheet extends StatefulWidget {
   const _JoinTripSheet();
+
+  @override
+  State<_JoinTripSheet> createState() => _JoinTripSheetState();
+}
+
+class _JoinTripSheetState extends State<_JoinTripSheet> {
+  final _controller = TextEditingController();
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -498,25 +473,61 @@ class _JoinTripSheet extends StatelessWidget {
           children: [
             Text('邀請碼加入', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 8),
-            const Text('這個流程之後會接上 Supabase `shared_access`。目前先保留 UI 入口。'),
+            const Text('輸入 6 碼邀請碼後，App 會在 Supabase 建立唯讀 shared_access。'),
             const SizedBox(height: 18),
-            const TextField(
+            TextField(
+              controller: _controller,
+              enabled: !_isSubmitting,
               maxLength: 6,
               textCapitalization: TextCapitalization.characters,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: '輸入 6 碼邀請碼',
                 hintText: '例如 A1B2C3',
               ),
             ),
             const SizedBox(height: 12),
             FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: _isSubmitting ? null : _submit,
               style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-              child: const Text('加入唯讀旅程'),
+              child: _isSubmitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('加入唯讀旅程'),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _submit() async {
+    setState(() => _isSubmitting = true);
+
+    try {
+      final joined = await TripStore.instance.joinTrip(_controller.text);
+      if (!mounted) {
+        return;
+      }
+
+      if (joined) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已加入共享旅程。')));
+        Navigator.of(context).pop();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('請確認邀請碼是否正確，且目前已連上 Supabase。')),
+        );
+      }
+    } on TripStoreException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 }

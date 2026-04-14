@@ -1,7 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trip_planner_app/app.dart';
+import 'package:trip_planner_app/features/trips/data/trip_store.dart';
 
 void main() {
+  setUp(() {
+    TripStore.instance.resetForTests();
+  });
+
   testWidgets('app renders trip landing content', (WidgetTester tester) async {
     await tester.pumpWidget(const TripPlannerApp());
     await tester.pumpAndSettle();

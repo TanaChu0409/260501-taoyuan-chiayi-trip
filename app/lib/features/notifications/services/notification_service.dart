@@ -38,8 +38,12 @@ class NotificationService {
     return _tripNotificationIds[tripId]?.length ?? 0;
   }
 
-  void resetForTests() {
+  void clearAllReminders() {
     _tripNotificationIds.clear();
+  }
+
+  void resetForTests() {
+    clearAllReminders();
   }
 
   int _buildNotificationId(String tripId, String suffix) {

@@ -1,8 +1,13 @@
 enum TripRole { owner, guest }
 
 class ParkingSpot {
-  const ParkingSpot({required this.name, required this.mapUrl});
+  const ParkingSpot({
+    required this.name,
+    required this.mapUrl,
+    this.id,
+  });
 
+  final String? id;
   final String name;
   final String mapUrl;
 }
@@ -10,6 +15,7 @@ class ParkingSpot {
 class StopItem {
   const StopItem({
     required this.title,
+    this.id,
     this.timeLabel,
     this.note,
     this.badge,
@@ -18,6 +24,7 @@ class StopItem {
     this.parkingSpots = const [],
   });
 
+  final String? id;
   final String title;
   final String? timeLabel;
   final String? note;
@@ -34,6 +41,7 @@ class TripDay {
     required this.dateLabel,
     required this.subtitle,
     required this.stops,
+    this.date,
   });
 
   final String id;
@@ -41,38 +49,109 @@ class TripDay {
   final String dateLabel;
   final String subtitle;
   final List<StopItem> stops;
+  final DateTime? date;
+
+  TripDay copyWith({
+    String? id,
+    String? label,
+    String? dateLabel,
+    String? subtitle,
+    List<StopItem>? stops,
+    DateTime? date,
+  }) {
+    return TripDay(
+      id: id ?? this.id,
+      label: label ?? this.label,
+      dateLabel: dateLabel ?? this.dateLabel,
+      subtitle: subtitle ?? this.subtitle,
+      stops: stops ?? this.stops,
+      date: date ?? this.date,
+    );
+  }
 }
 
 class TripSummary {
   const TripSummary({
     required this.id,
     required this.title,
-    required this.dateRange,
     required this.role,
     required this.days,
+    this.startDate,
+    this.endDate,
+    this.shareCode,
+    this.ownerId,
+    this.dateRange,
   });
 
   final String id;
   final String title;
-  final String dateRange;
   final TripRole role;
   final List<TripDay> days;
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final String? shareCode;
+  final String? ownerId;
+  final String? dateRange;
 
   int get stopCount => days.fold(0, (sum, day) => sum + day.stops.length);
+
+  String get displayDateRange {
+    if (startDate != null && endDate != null) {
+      return formatDateRange(startDate!, endDate!);
+    }
+    return dateRange ?? '';
+  }
+
+  TripSummary copyWith({
+    String? id,
+    String? title,
+    TripRole? role,
+    List<TripDay>? days,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? shareCode,
+    String? ownerId,
+    String? dateRange,
+  }) {
+    return TripSummary(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      role: role ?? this.role,
+      days: days ?? this.days,
+      startDate: startDate ?? this.startDate,
+      endDate: endDate ?? this.endDate,
+      shareCode: shareCode ?? this.shareCode,
+      ownerId: ownerId ?? this.ownerId,
+      dateRange: dateRange ?? this.dateRange,
+    );
+  }
+}
+
+String formatDateRange(DateTime startDate, DateTime endDate) {
+  String format(DateTime value) {
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    return '${value.year}/$month/$day';
+  }
+
+  return '${format(startDate)} - ${format(endDate)}';
 }
 
 const demoTrips = [
   TripSummary(
     id: 'taoyuan-chiayi-2026',
     title: '桃園嘉義行',
-    dateRange: '2026/05/01 - 05/03',
     role: TripRole.owner,
+    startDate: DateTime(2026, 5, 1),
+    endDate: DateTime(2026, 5, 3),
+    shareCode: 'TAO501',
     days: [
       TripDay(
         id: 'day1',
         label: '第一天',
         dateLabel: '5/1 Fri',
         subtitle: '桃園出發，家聚與晚餐後入住青埔商旅。',
+        date: DateTime(2026, 5, 1),
         stops: [
           StopItem(title: '小寶貝家出發', timeLabel: '07:00', note: '早上出門，正式開始三天行程。'),
           StopItem(
@@ -104,6 +183,7 @@ const demoTrips = [
         label: '第二天',
         dateLabel: '5/2 Sat',
         subtitle: '退房後一路往南，晚上入住嘉義兆品酒店。',
+        date: DateTime(2026, 5, 2),
         stops: [
           StopItem(title: '退房', timeLabel: '11:00'),
           StopItem(title: '華泰名品城', timeLabel: '12:00'),
@@ -118,6 +198,7 @@ const demoTrips = [
         label: '第三天',
         dateLabel: '5/3 Sun',
         subtitle: '嘉義市區行程，含餐廳與附近停車場資訊。',
+        date: DateTime(2026, 5, 3),
         stops: [
           StopItem(title: '退房', timeLabel: '12:00'),
           StopItem(
@@ -142,14 +223,16 @@ const demoTrips = [
   TripSummary(
     id: 'shared-family-trip',
     title: '家庭共遊（唯讀）',
-    dateRange: '2026/06/14 - 06/15',
     role: TripRole.guest,
+    startDate: DateTime(2026, 6, 14),
+    endDate: DateTime(2026, 6, 15),
     days: [
       TripDay(
         id: 'shared-day1',
         label: '第一天',
         dateLabel: '6/14 Sun',
         subtitle: '透過邀請碼加入的唯讀旅程。',
+        date: DateTime(2026, 6, 14),
         stops: [
           StopItem(title: '集合出發', timeLabel: '09:00', badge: '集合'),
           StopItem(title: '午餐餐廳', timeLabel: '12:00', badge: '午餐', isHighlight: true),

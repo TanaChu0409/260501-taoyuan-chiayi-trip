@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:trip_planner_app/core/theme/app_theme.dart';
 import 'package:trip_planner_app/features/trips/data/models/trip_model.dart';
 
-enum TripCardAction { deleteTrip, leaveTrip }
+enum TripCardAction { editTrip, deleteTrip, leaveTrip }
 
 class TripCard extends StatelessWidget {
   const TripCard({
@@ -48,6 +48,11 @@ class TripCard extends StatelessWidget {
                     itemBuilder: (context) => [
                       if (trip.role == TripRole.owner)
                         const PopupMenuItem(
+                          value: TripCardAction.editTrip,
+                          child: Text('編輯旅程'),
+                        ),
+                      if (trip.role == TripRole.owner)
+                        const PopupMenuItem(
                           value: TripCardAction.deleteTrip,
                           child: Text('刪除旅程'),
                         )
@@ -61,7 +66,7 @@ class TripCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 10),
-              Text(trip.dateRange),
+              Text(trip.displayDateRange),
               const SizedBox(height: 14),
               Wrap(
                 spacing: 10,
@@ -70,6 +75,8 @@ class TripCard extends StatelessWidget {
                   _MetaPill(label: '${trip.days.length} 天'),
                   _MetaPill(label: '${trip.stopCount} 個停靠點'),
                   _MetaPill(label: trip.role == TripRole.owner ? '我的旅程' : '分享給我的'),
+                  if (trip.role == TripRole.owner && trip.shareCode != null)
+                    _MetaPill(label: '邀請碼 ${trip.shareCode}'),
                 ],
               ),
             ],
