@@ -344,7 +344,7 @@ class _HeroPanel extends StatelessWidget {
             children: [
               _SummaryCard(value: '${ownedTrips.length}', label: '我的旅程'),
               _SummaryCard(value: '$totalStops', label: '已整理停靠點'),
-              const _SummaryCard(value: 'Supabase', label: '同步模式'),
+              const _SummaryCard(value: 'Supabase', label: '同步平台'),
             ],
           ),
         ],

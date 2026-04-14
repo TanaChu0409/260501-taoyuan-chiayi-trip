@@ -629,9 +629,6 @@ class TripStore extends ChangeNotifier {
     if (value > 0 && value <= labels.length) {
       return '第${labels[value - 1]}天';
     }
-    if (value <= 0) {
-      return '第${value}天';
-    }
     return '第${value}天';
   }
 
