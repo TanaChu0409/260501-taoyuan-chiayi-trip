@@ -616,7 +616,7 @@ class TripStore extends ChangeNotifier {
   }
 
   String _buildDateLabel(DateTime value) {
-    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const weekdays = ['週一', '週二', '週三', '週四', '週五', '週六', '週日'];
     return '${value.month}/${value.day} ${weekdays[value.weekday - 1]}';
   }
 

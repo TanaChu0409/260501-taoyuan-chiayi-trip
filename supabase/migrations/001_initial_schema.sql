@@ -10,6 +10,13 @@ begin
 end;
 $$;
 
+create or replace function public.generate_share_code()
+returns text
+language sql
+as $$
+  select upper(substring(replace(gen_random_uuid()::text, '-', '') from 1 for 6));
+$$;
+
 create table if not exists public.trips (
   id uuid primary key default gen_random_uuid(),
   title text not null,
@@ -17,7 +24,7 @@ create table if not exists public.trips (
   start_date date not null,
   end_date date not null,
   owner_id uuid not null,
-  share_code text not null unique default upper(substring(replace(gen_random_uuid()::text, '-', '') from 1 for 6)),
+  share_code text not null unique default public.generate_share_code(),
   is_archived boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
