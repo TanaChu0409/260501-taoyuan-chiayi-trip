@@ -64,7 +64,7 @@ class _TripsListScreenState extends State<TripsListScreen> {
                   children: [
                     Text('桃園嘉義行動導覽', style: Theme.of(context).textTheme.headlineLarge),
                     const SizedBox(height: 12),
-                    const Text('目前已接上 Supabase 旅程同步，Owner 可直接建立、編輯、刪除旅程。'),
+                    const Text('目前已接上 Supabase 旅程同步，owner 可直接建立、編輯、刪除旅程。'),
                     const SizedBox(height: 16),
                     _StatusBanner(
                       isRemoteActive: _tripStore.isRemoteActive,

@@ -587,9 +587,11 @@ class TripStore extends ChangeNotifier {
 
   Future<void> _reseedNotifications() async {
     NotificationService.instance.clearAllReminders();
-    for (final trip in _trips) {
-      await NotificationService.instance.scheduleTripReminders(trip);
-    }
+    await Future.wait(
+      [
+        for (final trip in _trips) NotificationService.instance.scheduleTripReminders(trip),
+      ],
+    );
   }
 
   List<DateTime> _expandDates(DateTime startDate, DateTime endDate) {
