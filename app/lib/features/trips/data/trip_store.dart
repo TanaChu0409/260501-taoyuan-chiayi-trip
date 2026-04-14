@@ -617,13 +617,20 @@ class TripStore extends ChangeNotifier {
 
   String _buildDateLabel(DateTime value) {
     const weekdays = ['週一', '週二', '週三', '週四', '週五', '週六', '週日'];
-    return '${value.month}/${value.day} ${weekdays[value.weekday - 1]}';
+    final weekdayIndex = value.weekday - 1;
+    final weekdayLabel = weekdayIndex >= 0 && weekdayIndex < weekdays.length
+        ? weekdays[weekdayIndex]
+        : '週?';
+    return '${value.month}/${value.day} $weekdayLabel';
   }
 
   String _buildDayLabel(int value) {
-    const labels = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
-    if (value >= 0 && value < labels.length) {
-      return '第${labels[value]}天';
+    const labels = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+    if (value > 0 && value <= labels.length) {
+      return '第${labels[value - 1]}天';
+    }
+    if (value <= 0) {
+      return '第${value}天';
     }
     return '第${value}天';
   }
