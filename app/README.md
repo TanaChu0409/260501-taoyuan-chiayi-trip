@@ -10,7 +10,7 @@ Flutter 版的桃園嘉義旅程規劃 App，已接上 Supabase 旅程同步。
 2. 用 Flutter 的 `--dart-define` 帶入連線資訊
 
 ```bash
-cd /home/runner/work/260501-taoyuan-chiayi-trip/260501-taoyuan-chiayi-trip/app
+cd app
 flutter pub get
 flutter run \
   --dart-define=SUPABASE_URL=你的_supabase_url \
