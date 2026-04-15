@@ -1,6 +1,10 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:trip_planner_app/core/supabase/supabase_error_formatter.dart';
 import 'package:trip_planner_app/core/theme/app_theme.dart';
 import 'package:trip_planner_app/features/auth/data/auth_service.dart';
 
@@ -17,6 +21,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _passwordController = TextEditingController();
   bool _isSignInMode = true;
   bool _isSubmitting = false;
+  bool _isGoogleLoading = false;
+  bool _isAppleLoading = false;
   String? _errorMessage;
 
   @override
@@ -24,6 +30,42 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  bool get _anyLoading => _isSubmitting || _isGoogleLoading || _isAppleLoading;
+
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      _isGoogleLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      await ref.read(authServiceProvider).signInWithGoogle();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = SupabaseErrorFormatter.userMessage(error);
+      });
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
+    }
+  }
+
+  Future<void> _signInWithApple() async {
+    setState(() {
+      _isAppleLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      await ref.read(authServiceProvider).signInWithApple();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = SupabaseErrorFormatter.userMessage(error);
+      });
+    } finally {
+      if (mounted) setState(() => _isAppleLoading = false);
+    }
   }
 
   Future<void> _submit() async {
@@ -67,15 +109,15 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       }
 
       setState(() {
-        _errorMessage = error.message;
+        _errorMessage = SupabaseErrorFormatter.userMessage(error);
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _errorMessage = '登入失敗，請稍後再試。';
+        _errorMessage = SupabaseErrorFormatter.userMessage(error);
       });
     } finally {
       if (mounted) {
@@ -133,8 +175,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                           const SizedBox(height: 12),
                           Text(
                             _isSignInMode
-                                ? '使用 Email / Password 登入 Supabase，登入後會自動進入旅程列表。'
-                                : '先建立測試帳號，後續再擴充 Google / Apple 登入。',
+                                ? '使用 Email / Password 或社交帳號登入，登入後會自動進入旅程列表。'
+                                : '建立 Email 帳號，或直接使用 Google / Apple 帳號登入。',
                           ),
                           const SizedBox(height: 24),
                           TextFormField(
@@ -188,7 +230,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                           ],
                           const SizedBox(height: 20),
                           FilledButton.icon(
-                            onPressed: _isSubmitting ? null : _submit,
+                            onPressed: _anyLoading ? null : _submit,
                             style: FilledButton.styleFrom(
                               minimumSize: const Size.fromHeight(52),
                               backgroundColor: AppColors.accent,
@@ -204,7 +246,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                           ),
                           const SizedBox(height: 12),
                           TextButton(
-                            onPressed: _isSubmitting
+                            onPressed: _anyLoading
                                 ? null
                                 : () {
                                     setState(() {
@@ -213,9 +255,55 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                     });
                                   },
                             child: Text(
-                              _isSignInMode ? '還沒有帳號？建立測試帳號' : '已經有帳號？返回登入',
+                              _isSignInMode ? '還沒有帳號？建立帳號' : '已經有帳號？返回登入',
                             ),
                           ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              const Expanded(child: Divider()),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                child: Text(
+                                  '或',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                              const Expanded(child: Divider()),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: _anyLoading ? null : _signInWithGoogle,
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
+                            ),
+                            icon: _isGoogleLoading
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.g_mobiledata_rounded, size: 22),
+                            label: const Text('以 Google 帳號登入'),
+                          ),
+                          if (kIsWeb || !Platform.isAndroid) ...[  
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed: _anyLoading ? null : _signInWithApple,
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(48),
+                              ),
+                              icon: _isAppleLoading
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.apple_rounded, size: 22),
+                              label: const Text('以 Apple 帳號登入'),
+                            ),
+                          ],
                         ],
                       ),
                     ),

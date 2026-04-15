@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:trip_planner_app/core/supabase/supabase_error_formatter.dart';
 import 'package:trip_planner_app/core/theme/app_theme.dart';
 import 'package:trip_planner_app/features/auth/data/auth_service.dart';
 import 'package:trip_planner_app/features/trips/data/join_trip_result.dart';
@@ -92,7 +93,11 @@ class _TripsListScreenState extends ConsumerState<TripsListScreen> {
                 const Center(child: CircularProgressIndicator()),
                 const SizedBox(height: 24),
               ] else if (hasLoadError) ...[
-                _LoadErrorCard(onRetry: () => _tripStore.reloadTrips()),
+                _LoadErrorCard(
+                  onRetry: () => _tripStore.reloadTrips(),
+                  errorMessage:
+                      SupabaseErrorFormatter.userMessage(_tripStore.loadError!),
+                ),
                 const SizedBox(height: 24),
               ],
               _SectionHeader(
@@ -400,13 +405,13 @@ class _CreateTripSheetState extends State<_CreateTripSheet> {
         return;
       }
       Navigator.of(context).pop(trip);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('建立旅程失敗，請稍後再試')),
+        SnackBar(content: Text(SupabaseErrorFormatter.userMessage(error))),
       );
     } finally {
       if (mounted) {
@@ -675,13 +680,15 @@ class _JoinTripSheetState extends State<_JoinTripSheet> {
           messenger.hideCurrentSnackBar();
           messenger.showSnackBar(const SnackBar(content: Text('這個分享碼已經加入過了')));
       }
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
 
       messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(const SnackBar(content: Text('加入旅程失敗，請稍後再試')));
+      messenger.showSnackBar(
+        SnackBar(content: Text(SupabaseErrorFormatter.userMessage(error))),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -712,9 +719,10 @@ class _EmptyTripsCard extends StatelessWidget {
 }
 
 class _LoadErrorCard extends StatelessWidget {
-  const _LoadErrorCard({required this.onRetry});
+  const _LoadErrorCard({required this.onRetry, required this.errorMessage});
 
   final VoidCallback onRetry;
+  final String errorMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -736,7 +744,7 @@ class _LoadErrorCard extends StatelessWidget {
                 ?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 8),
-          const Text('請確認 Supabase 設定與登入狀態後再試一次。'),
+          Text(errorMessage),
           const SizedBox(height: 12),
           FilledButton(onPressed: onRetry, child: const Text('重新載入')),
         ],

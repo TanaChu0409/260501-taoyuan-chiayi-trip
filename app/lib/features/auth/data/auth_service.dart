@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -32,5 +33,32 @@ class AuthService {
 
   Future<void> signOut() {
     return _client.auth.signOut();
+  }
+
+  /// Returns `true` if the OAuth browser flow was launched successfully.
+  /// Supabase will deliver the session via [authStateChanges] once the user
+  /// completes authorisation and the deep-link / redirect is received.
+  Future<bool> signInWithGoogle() {
+    return _client.auth.signInWithOAuth(
+      OAuthProvider.google,
+      redirectTo: _oauthRedirectTo,
+    );
+  }
+
+  Future<bool> signInWithApple() {
+    return _client.auth.signInWithOAuth(
+      OAuthProvider.apple,
+      redirectTo: _oauthRedirectTo,
+    );
+  }
+
+  /// Redirect URI sent to Supabase.
+  /// - Web: the current page origin (Supabase redirects back here).
+  /// - Mobile: a custom deep-link scheme registered in AndroidManifest / Info.plist.
+  static String get _oauthRedirectTo {
+    if (kIsWeb) {
+      return Uri.base.origin;
+    }
+    return 'com.example.tripplannerapp://login-callback';
   }
 }

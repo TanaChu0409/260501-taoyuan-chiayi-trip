@@ -260,10 +260,16 @@ class TripService {
         .from('days')
         .select('id, trip_id, date, label, subtitle, sort_order')
         .inFilter('trip_id', tripIds)
-        .order('sort_order');
-    return rows
+        .order('sort_order', ascending: true);
+    final result = rows
         .map((row) => Map<String, dynamic>.from(row))
-        .toList(growable: false);
+        .toList(growable: true);
+    result.sort((a, b) {
+      final sortA = a['sort_order'] as int? ?? 0;
+      final sortB = b['sort_order'] as int? ?? 0;
+      return sortA.compareTo(sortB);
+    });
+    return List<Map<String, dynamic>>.unmodifiable(result);
   }
 
   Future<List<Map<String, dynamic>>> _fetchStops(List<String> dayIds) async {

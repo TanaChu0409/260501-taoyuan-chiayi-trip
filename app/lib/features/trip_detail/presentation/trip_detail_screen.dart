@@ -56,7 +56,7 @@ class _TripDetailScreenState extends State<TripDetailScreen>
   }
 
   void _handleTabChanged() {
-    if (!mounted) {
+    if (!mounted || _tabController.indexIsChanging) {
       return;
     }
 
