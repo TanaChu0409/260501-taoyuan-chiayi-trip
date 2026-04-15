@@ -200,6 +200,60 @@ class TripSummary {
   int get stopCount => days.fold(0, (sum, day) => sum + day.stops.length);
 }
 
+List<StopItem> sortStopsChronologically(Iterable<StopItem> stops) {
+  final indexedStops = [
+    for (var index = 0; index < stops.length; index += 1)
+      _IndexedStop(stop: stops.elementAt(index), index: index),
+  ];
+
+  indexedStops.sort((left, right) {
+    final leftMinutes = parseTimeLabelToMinutes(left.stop.timeLabel);
+    final rightMinutes = parseTimeLabelToMinutes(right.stop.timeLabel);
+
+    if (leftMinutes == null && rightMinutes != null) {
+      return 1;
+    }
+    if (leftMinutes != null && rightMinutes == null) {
+      return -1;
+    }
+    if (leftMinutes != null && rightMinutes != null) {
+      final timeComparison = leftMinutes.compareTo(rightMinutes);
+      if (timeComparison != 0) {
+        return timeComparison;
+      }
+    }
+
+    final sortComparison = left.stop.sortOrder.compareTo(right.stop.sortOrder);
+    if (sortComparison != 0) {
+      return sortComparison;
+    }
+
+    return left.index.compareTo(right.index);
+  });
+
+  return [for (final item in indexedStops) item.stop];
+}
+
+int? parseTimeLabelToMinutes(String? rawValue) {
+  final normalizedValue = _normalizeTimeValue(rawValue);
+  if (normalizedValue == null) {
+    return null;
+  }
+
+  final parts = normalizedValue.split(':');
+  if (parts.length != 2) {
+    return null;
+  }
+
+  final hour = int.tryParse(parts[0]);
+  final minute = int.tryParse(parts[1]);
+  if (hour == null || minute == null) {
+    return null;
+  }
+
+  return hour * 60 + minute;
+}
+
 String? _normalizeTimeValue(String? rawValue) {
   if (rawValue == null || rawValue.isEmpty) {
     return null;
@@ -213,4 +267,11 @@ String? _normalizeTimeValue(String? rawValue) {
   final hour = parts[0].padLeft(2, '0');
   final minute = parts[1].padLeft(2, '0');
   return '$hour:$minute';
+}
+
+class _IndexedStop {
+  const _IndexedStop({required this.stop, required this.index});
+
+  final StopItem stop;
+  final int index;
 }

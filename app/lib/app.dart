@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:trip_planner_app/core/router/app_router.dart';
 import 'package:trip_planner_app/core/theme/app_theme.dart';
+import 'package:trip_planner_app/core/ui/app_scaffold_messenger.dart';
 
 class TripPlannerApp extends ConsumerWidget {
   const TripPlannerApp({super.key});
@@ -11,8 +12,9 @@ class TripPlannerApp extends ConsumerWidget {
     final router = ref.watch(appRouterProvider);
 
     return MaterialApp.router(
-      title: '桃園嘉義行動導覽',
+      title: '旅遊規劃APP',
       theme: buildAppTheme(),
+      scaffoldMessengerKey: appScaffoldMessengerKey,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
     );

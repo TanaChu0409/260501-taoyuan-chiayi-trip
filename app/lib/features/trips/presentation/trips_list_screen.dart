@@ -73,7 +73,7 @@ class _TripsListScreenState extends ConsumerState<TripsListScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      '桃園嘉義行動導覽',
+                      '旅遊規劃APP',
                       style: Theme.of(context).textTheme.headlineLarge,
                     ),
                   ),

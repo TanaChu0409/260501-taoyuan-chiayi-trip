@@ -28,6 +28,7 @@ class _DayTabState extends State<DayTab> {
   final GlobalKey _addButtonKey = GlobalKey();
   bool _hasQueuedVisibilityCheck = false;
   bool _lastReportedVisibility = false;
+  Size _viewportSize = Size.zero;
 
   @override
   void initState() {
@@ -62,7 +63,9 @@ class _DayTabState extends State<DayTab> {
   }
 
   void _reportAddButtonVisibility() {
-    final isVisible = widget.isActive && !widget.isReadOnly && _isWidgetVisible(_addButtonKey);
+    final isVisible = widget.isActive &&
+        !widget.isReadOnly &&
+        _isWidgetVisible(_addButtonKey, _viewportSize);
     if (_lastReportedVisibility == isVisible) {
       return;
     }
@@ -71,29 +74,31 @@ class _DayTabState extends State<DayTab> {
     widget.onAddButtonVisibilityChanged(isVisible);
   }
 
-  bool _isWidgetVisible(GlobalKey key) {
+  bool _isWidgetVisible(GlobalKey key, Size viewportSize) {
     final targetContext = key.currentContext;
-    if (targetContext == null) {
+    if (targetContext == null || viewportSize == Size.zero) {
       return false;
     }
 
     final renderObject = targetContext.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.attached || !renderObject.hasSize) {
+    if (renderObject is! RenderBox ||
+        !renderObject.attached ||
+        !renderObject.hasSize) {
       return false;
     }
 
     final topLeft = renderObject.localToGlobal(Offset.zero);
     final rect = topLeft & renderObject.size;
-    final screenSize = MediaQuery.sizeOf(targetContext);
 
     return rect.bottom > 0 &&
         rect.right > 0 &&
-        rect.top < screenSize.height &&
-        rect.left < screenSize.width;
+        rect.top < viewportSize.height &&
+        rect.left < viewportSize.width;
   }
 
   @override
   Widget build(BuildContext context) {
+    _viewportSize = MediaQuery.sizeOf(context);
     _scheduleVisibilityCheck();
 
     return NotificationListener<ScrollNotification>(
@@ -102,7 +107,7 @@ class _DayTabState extends State<DayTab> {
         return false;
       },
       child: ReorderableListView(
-        padding: const EdgeInsets.fromLTRB(8, 16, 8, 24),
+        padding: EdgeInsets.fromLTRB(8, 16, 8, widget.isReadOnly ? 24 : 40),
         buildDefaultDragHandles: false,
         onReorder: widget.isReadOnly
             ? (_, __) {}
@@ -115,23 +120,29 @@ class _DayTabState extends State<DayTab> {
                 );
                 _scheduleVisibilityCheck();
               },
+        footer: widget.isReadOnly
+            ? null
+            : Padding(
+                key: ValueKey('add-stop-${widget.day.id}'),
+                padding: const EdgeInsets.only(top: 4, bottom: 80),
+                child: OutlinedButton.icon(
+                  key: _addButtonKey,
+                  onPressed: () => context.push(
+                      '/trips/${widget.tripId}/days/${widget.day.id}/stops/new'),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('新增地點'),
+                ),
+              ),
         children: [
           for (var index = 0; index < widget.day.stops.length; index += 1)
             Padding(
               key: ValueKey(widget.day.stops[index].id ?? 'stop-$index'),
-              padding: EdgeInsets.only(bottom: index == widget.day.stops.length - 1 && widget.isReadOnly ? 0 : 14),
+              padding: EdgeInsets.only(
+                  bottom:
+                      index == widget.day.stops.length - 1 && widget.isReadOnly
+                          ? 0
+                          : 14),
               child: _buildStopItem(context, widget.day.stops[index], index),
-            ),
-          if (!widget.isReadOnly)
-            Container(
-              key: ValueKey('add-stop-${widget.day.id}'),
-              padding: const EdgeInsets.only(top: 4),
-              child: OutlinedButton.icon(
-                key: _addButtonKey,
-                onPressed: () => context.push('/trips/${widget.tripId}/days/${widget.day.id}/stops/new'),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('新增地點'),
-              ),
             ),
         ],
       ),
@@ -144,7 +155,8 @@ class _DayTabState extends State<DayTab> {
       isReadOnly: widget.isReadOnly,
       onTap: widget.isReadOnly || stop.id == null
           ? null
-          : () => context.push('/trips/${widget.tripId}/days/${widget.day.id}/stops/${stop.id}/edit'),
+          : () => context.push(
+              '/trips/${widget.tripId}/days/${widget.day.id}/stops/${stop.id}/edit'),
       trailing: widget.isReadOnly
           ? null
           : ReorderableDragStartListener(
@@ -190,7 +202,8 @@ class _DayTabState extends State<DayTab> {
               ),
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+                style: FilledButton.styleFrom(
+                    backgroundColor: Colors.red.shade700),
                 child: const Text('確認刪除'),
               ),
             ],

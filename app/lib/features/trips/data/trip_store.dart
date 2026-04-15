@@ -95,7 +95,7 @@ class TripStore extends ChangeNotifier {
     final draft =
         _normalizeStopDraft(stop, sortOrder: location.day.stops.length);
     final savedStop = await _saveStop(location.day.id, draft);
-    final updatedStops = [...location.day.stops, savedStop];
+    final updatedStops = _normalizeStops([...location.day.stops, savedStop]);
     final updatedTrip = _replaceDayAt(
       location.trip,
       location.dayIndex,
@@ -103,9 +103,12 @@ class TripStore extends ChangeNotifier {
     );
 
     _trips[location.tripIndex] = updatedTrip;
+    await _stopService.reorderStops(
+        dayId: location.day.id, stops: updatedStops);
     await _refreshTripReminders(updatedTrip);
     notifyListeners();
-    return savedStop;
+    return updatedStops.firstWhere((item) => item.id == savedStop.id,
+        orElse: () => savedStop);
   }
 
   Future<StopItem> updateStop({
@@ -135,7 +138,9 @@ class TripStore extends ChangeNotifier {
       next: draft,
     );
 
-    final updatedStops = [...location.day.stops]..[stopIndex] = savedStop;
+    final updatedStops = _normalizeStops(
+      [...location.day.stops]..[stopIndex] = savedStop,
+    );
     final updatedTrip = _replaceDayAt(
       location.trip,
       location.dayIndex,
@@ -143,9 +148,12 @@ class TripStore extends ChangeNotifier {
     );
 
     _trips[location.tripIndex] = updatedTrip;
+    await _stopService.reorderStops(
+        dayId: location.day.id, stops: updatedStops);
     await _refreshTripReminders(updatedTrip);
     notifyListeners();
-    return savedStop;
+    return updatedStops.firstWhere((item) => item.id == savedStop.id,
+        orElse: () => savedStop);
   }
 
   Future<void> reorderStops({
@@ -174,7 +182,7 @@ class TripStore extends ChangeNotifier {
 
     final movedStop = stops.removeAt(oldIndex);
     stops.insert(targetIndex, movedStop);
-    final reorderedStops = _reindexStops(stops);
+    final reorderedStops = _normalizeStops(stops);
     final updatedTrip = _replaceDayAt(
       location.trip,
       location.dayIndex,
@@ -211,7 +219,7 @@ class TripStore extends ChangeNotifier {
 
     await _stopService.deleteStop(stop.id!);
     final updatedStops =
-        _reindexStops([...location.day.stops]..removeAt(stopIndex));
+        _normalizeStops([...location.day.stops]..removeAt(stopIndex));
     final updatedTrip = _replaceDayAt(
       location.trip,
       location.dayIndex,
@@ -219,6 +227,8 @@ class TripStore extends ChangeNotifier {
     );
 
     _trips[location.tripIndex] = updatedTrip;
+    await _stopService.reorderStops(
+        dayId: location.day.id, stops: updatedStops);
     await _refreshTripReminders(updatedTrip);
     notifyListeners();
     return true;
@@ -480,10 +490,11 @@ class TripStore extends ChangeNotifier {
     ];
   }
 
-  List<StopItem> _reindexStops(List<StopItem> stops) {
+  List<StopItem> _normalizeStops(List<StopItem> stops) {
+    final orderedStops = sortStopsChronologically(stops);
     return [
-      for (var index = 0; index < stops.length; index += 1)
-        stops[index].copyWith(sortOrder: index),
+      for (var index = 0; index < orderedStops.length; index += 1)
+        orderedStops[index].copyWith(sortOrder: index),
     ];
   }
 

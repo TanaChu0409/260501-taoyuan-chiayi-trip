@@ -55,4 +55,28 @@ void main() {
 
     expect(trip.stopCount, 3);
   });
+
+  test('sort stops chronologically with untimed stops last', () {
+    const stops = [
+      StopItem(title: '午餐', timeLabel: '12:00', sortOrder: 1),
+      StopItem(title: '未排定', sortOrder: 0),
+      StopItem(title: '早餐', timeLabel: '08:30', sortOrder: 2),
+    ];
+
+    final sorted = sortStopsChronologically(stops);
+
+    expect(sorted.map((stop) => stop.title).toList(), ['早餐', '午餐', '未排定']);
+  });
+
+  test('sort stops keeps sort order for matching times', () {
+    const stops = [
+      StopItem(title: 'B 點', timeLabel: '09:00', sortOrder: 1),
+      StopItem(title: 'A 點', timeLabel: '09:00', sortOrder: 0),
+      StopItem(title: 'C 點', timeLabel: '09:00', sortOrder: 2),
+    ];
+
+    final sorted = sortStopsChronologically(stops);
+
+    expect(sorted.map((stop) => stop.title).toList(), ['A 點', 'B 點', 'C 點']);
+  });
 }

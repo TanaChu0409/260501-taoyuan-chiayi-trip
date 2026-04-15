@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:trip_planner_app/core/supabase/supabase_error_formatter.dart';
 import 'package:trip_planner_app/core/theme/app_theme.dart';
+import 'package:trip_planner_app/core/ui/app_scaffold_messenger.dart';
 import 'package:trip_planner_app/features/trips/data/models/trip_model.dart';
 import 'package:trip_planner_app/features/trips/data/trip_store.dart';
 
@@ -384,16 +385,16 @@ class _StopFormScreenState extends State<StopFormScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAppSnackBar(
         SnackBar(content: Text(_isEditMode ? '已更新地點' : '已新增地點')),
       );
-      context.pop(true);
+      context.go('/trips/${widget.tripId}');
     } catch (error) {
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAppSnackBar(
         SnackBar(content: Text(SupabaseErrorFormatter.userMessage(error))),
       );
     } finally {

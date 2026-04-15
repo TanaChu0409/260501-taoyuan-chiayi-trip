@@ -20,7 +20,8 @@ Future<void> main() async {
         stack: stackTrace,
         library: 'main',
         informationCollector: () => [
-          DiagnosticsNode.message('Supabase initialization failed during app startup.'),
+          DiagnosticsNode.message(
+              'Supabase initialization failed during app startup.'),
         ],
       ),
     );
@@ -39,7 +40,7 @@ class _StartupFailureApp extends StatelessWidget {
     final details = SupabaseErrorFormatter.diagnosticDetails(error);
 
     return MaterialApp(
-      title: '桃園嘉義行動導覽',
+      title: '旅遊規劃APP',
       theme: buildAppTheme(),
       debugShowCheckedModeBanner: false,
       home: Scaffold(
@@ -56,13 +57,15 @@ class _StartupFailureApp extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Supabase 初始化失敗', style: Theme.of(context).textTheme.headlineSmall),
+                        Text('Supabase 初始化失敗',
+                            style: Theme.of(context).textTheme.headlineSmall),
                         const SizedBox(height: 12),
                         Text(message),
                         const SizedBox(height: 16),
                         const Text('建議檢查：'),
                         const SizedBox(height: 8),
-                        const Text('1. app/.env 是否存在且填入正確的 SUPABASE_URL、SUPABASE_ANON_KEY'),
+                        const Text(
+                            '1. app/.env 是否存在且填入正確的 SUPABASE_URL、SUPABASE_ANON_KEY'),
                         const Text('2. Supabase SQL migrations 是否已完整執行'),
                         const Text('3. 本機網路是否能連到 Supabase 專案'),
                         const SizedBox(height: 16),

@@ -283,9 +283,36 @@ class TripService {
             'id, day_id, time, title, note, badge, map_url, is_highlight, sort_order')
         .inFilter('day_id', dayIds)
         .order('sort_order');
-    return rows
+    final result = rows
         .map((row) => Map<String, dynamic>.from(row))
-        .toList(growable: false);
+        .toList(growable: true);
+    result.sort((left, right) {
+      final dayComparison =
+          (left['day_id'] as String).compareTo(right['day_id'] as String);
+      if (dayComparison != 0) {
+        return dayComparison;
+      }
+
+      final leftMinutes = parseTimeLabelToMinutes(left['time'] as String?);
+      final rightMinutes = parseTimeLabelToMinutes(right['time'] as String?);
+      if (leftMinutes == null && rightMinutes != null) {
+        return 1;
+      }
+      if (leftMinutes != null && rightMinutes == null) {
+        return -1;
+      }
+      if (leftMinutes != null && rightMinutes != null) {
+        final timeComparison = leftMinutes.compareTo(rightMinutes);
+        if (timeComparison != 0) {
+          return timeComparison;
+        }
+      }
+
+      final leftSortOrder = left['sort_order'] as int? ?? 0;
+      final rightSortOrder = right['sort_order'] as int? ?? 0;
+      return leftSortOrder.compareTo(rightSortOrder);
+    });
+    return List<Map<String, dynamic>>.unmodifiable(result);
   }
 
   Future<List<Map<String, dynamic>>> _fetchParkingSpots(
