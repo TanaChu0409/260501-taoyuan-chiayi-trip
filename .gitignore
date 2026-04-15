@@ -9,3 +9,4 @@ app/.pub/
 app/build/
 app/.idea/
 app/.metadata
+client_secret_*.json
