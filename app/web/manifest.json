@@ -1,11 +1,11 @@
 {
-    "name": "trip_planner_app",
-    "short_name": "trip_planner_app",
+    "name": "旅遊規劃 APP",
+    "short_name": "旅遊規劃",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "桃園到嘉義行程共用與規劃工具。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
