@@ -5,21 +5,24 @@ import 'package:trip_planner_app/features/trips/data/join_trip_result.dart';
 import 'package:trip_planner_app/features/trips/data/models/trip_model.dart';
 
 class TripService {
-  TripService._();
+  TripService({SupabaseClient? client, Random? random})
+      : _clientOverride = client,
+        _random = random ?? Random();
 
-  static final TripService instance = TripService._();
+  static final TripService instance = TripService();
 
   static const _alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-  final Random _random = Random();
+  final SupabaseClient? _clientOverride;
+  final Random _random;
 
-  SupabaseClient get _client => Supabase.instance.client;
+  SupabaseClient get _client => _clientOverride ?? Supabase.instance.client;
 
   Future<List<TripSummary>> fetchTripsForCurrentUser() async {
     final userId = _requireUserId();
     final ownedRows = await _client
         .from('trips')
-        .select('id, title, start_date, end_date, share_code')
+        .select('id, title, start_date, end_date, share_code, color')
         .eq('owner_id', userId)
         .eq('is_archived', false)
         .order('start_date', ascending: false);
@@ -38,7 +41,7 @@ class TripService {
         ? const <dynamic>[]
         : await _client
             .from('trips')
-            .select('id, title, start_date, end_date, share_code')
+            .select('id, title, start_date, end_date, share_code, color')
             .inFilter('id', sharedTripIds)
             .eq('is_archived', false)
             .order('start_date', ascending: false);
@@ -55,6 +58,7 @@ class TripService {
     required String title,
     required DateTime startDate,
     required DateTime endDate,
+    String? color,
   }) async {
     final userId = _requireUserId();
 
@@ -69,8 +73,9 @@ class TripService {
               'end_date': _toIsoDate(endDate),
               'owner_id': userId,
               'share_code': shareCode,
+              if (color != null) 'color': color,
             })
-            .select('id, title, start_date, end_date, share_code')
+            .select('id, title, start_date, end_date, share_code, color')
             .single();
 
         final tripId = tripRow['id'] as String;
@@ -98,7 +103,7 @@ class TripService {
   Future<TripSummary?> fetchTripById(String tripId, {TripRole? role}) async {
     final rows = await _client
         .from('trips')
-        .select('id, title, start_date, end_date, share_code, owner_id')
+        .select('id, title, start_date, end_date, share_code, owner_id, color')
         .eq('id', tripId)
         .limit(1);
 
@@ -182,6 +187,20 @@ class TripService {
     return rows.isNotEmpty;
   }
 
+  Future<void> updateTripColor({
+    required String tripId,
+    required String color,
+  }) async {
+    final userId = _requireUserId();
+    await _client
+        .from('trips')
+        .update({'color': color})
+        .eq('id', tripId)
+        .eq('owner_id', userId)
+        .select('id')
+        .single();
+  }
+
   Future<List<TripSummary>> _assembleTrips({
     required List<dynamic> rows,
     required TripRole role,
@@ -250,6 +269,7 @@ class TripService {
             role: role,
             days: daysByTripId[row['id'] as String] ?? const [],
             shareCode: row['share_code'] as String?,
+            color: row['color'] as String?,
           ),
         )
         .toList(growable: false);

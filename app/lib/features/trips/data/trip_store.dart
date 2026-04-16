@@ -7,14 +7,21 @@ import 'package:trip_planner_app/features/trips/data/models/trip_model.dart';
 import 'package:trip_planner_app/features/trips/data/trip_service.dart';
 
 class TripStore extends ChangeNotifier {
-  TripStore._();
+  TripStore({
+    TripService? tripService,
+    StopService? stopService,
+    ParkingSpotService? parkingSpotService,
+  })  : _tripService = tripService ?? TripService.instance,
+        _stopService = stopService ?? StopService.instance,
+        _parkingSpotService =
+            parkingSpotService ?? ParkingSpotService.instance;
 
-  static final TripStore instance = TripStore._();
+  static final TripStore instance = TripStore();
 
   final List<TripSummary> _trips = [];
-  final TripService _tripService = TripService.instance;
-  final StopService _stopService = StopService.instance;
-  final ParkingSpotService _parkingSpotService = ParkingSpotService.instance;
+  final TripService _tripService;
+  final StopService _stopService;
+  final ParkingSpotService _parkingSpotService;
 
   Future<void>? _loadFuture;
   bool _isLoading = false;
@@ -304,17 +311,34 @@ class TripStore extends ChangeNotifier {
     required String title,
     required DateTime startDate,
     required DateTime endDate,
+    String? color,
   }) async {
     final trip = await _tripService.createTrip(
       title: title,
       startDate: startDate,
       endDate: endDate,
+      color: color,
     );
 
     _trips.insert(0, trip);
     await NotificationService.instance.scheduleTripReminders(trip);
     notifyListeners();
     return trip;
+  }
+
+  Future<void> updateTripColor({
+    required String tripId,
+    required String color,
+  }) async {
+    final tripIndex = _trips
+        .indexWhere((trip) => trip.id == tripId && trip.role == TripRole.owner);
+    if (tripIndex == -1) {
+      throw StateError('Trip not found, or trip is read-only.');
+    }
+
+    await _tripService.updateTripColor(tripId: tripId, color: color);
+    _trips[tripIndex] = _trips[tripIndex].copyWith(color: color);
+    notifyListeners();
   }
 
   Future<JoinTripByCodeResult> joinTripByCode(String rawCode) async {

@@ -9,6 +9,7 @@ import 'package:trip_planner_app/features/trips/data/join_trip_result.dart';
 import 'package:trip_planner_app/features/trips/data/models/trip_model.dart';
 import 'package:trip_planner_app/features/trips/data/trip_store.dart';
 import 'package:trip_planner_app/features/trips/presentation/widgets/trip_card.dart';
+import 'package:trip_planner_app/features/trips/presentation/widgets/trip_color_picker.dart';
 
 class TripsListScreen extends ConsumerStatefulWidget {
   const TripsListScreen({super.key});
@@ -292,6 +293,7 @@ class _CreateTripSheetState extends State<_CreateTripSheet> {
   final _titleController = TextEditingController();
   DateTime _startDate = DateTime(2026, 5, 1);
   DateTime _endDate = DateTime(2026, 5, 3);
+  String _selectedColor = TripColors.defaultHex;
   bool _isSubmitting = false;
 
   @override
@@ -332,6 +334,15 @@ class _CreateTripSheetState extends State<_CreateTripSheet> {
                     return '請輸入旅程名稱';
                   }
                   return null;
+                },
+              ),
+              const SizedBox(height: 18),
+              TripColorPicker(
+                selectedColor: _selectedColor,
+                onColorChanged: (value) {
+                  setState(() {
+                    _selectedColor = value;
+                  });
                 },
               ),
               const SizedBox(height: 14),
@@ -399,6 +410,7 @@ class _CreateTripSheetState extends State<_CreateTripSheet> {
         title: _titleController.text.trim(),
         startDate: _startDate,
         endDate: _endDate,
+        color: _selectedColor,
       );
 
       if (!mounted) {

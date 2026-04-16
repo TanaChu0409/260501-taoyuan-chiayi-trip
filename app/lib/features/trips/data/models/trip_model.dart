@@ -167,6 +167,7 @@ class TripSummary {
     required this.days,
     this.shareCode,
     this.sharedFromTripId,
+    this.color,
   });
 
   final String id;
@@ -176,6 +177,7 @@ class TripSummary {
   final List<TripDay> days;
   final String? shareCode;
   final String? sharedFromTripId;
+  final String? color;
 
   TripSummary copyWith({
     String? id,
@@ -185,6 +187,7 @@ class TripSummary {
     List<TripDay>? days,
     String? shareCode,
     String? sharedFromTripId,
+    String? color,
   }) {
     return TripSummary(
       id: id ?? this.id,
@@ -194,6 +197,7 @@ class TripSummary {
       days: days ?? this.days,
       shareCode: shareCode ?? this.shareCode,
       sharedFromTripId: sharedFromTripId ?? this.sharedFromTripId,
+      color: color ?? this.color,
     );
   }
 

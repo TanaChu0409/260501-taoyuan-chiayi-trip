@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:trip_planner_app/core/supabase/supabase_error_formatter.dart';
 import 'package:trip_planner_app/core/theme/app_theme.dart';
 import 'package:trip_planner_app/features/trip_detail/presentation/widgets/day_tab.dart';
 import 'package:trip_planner_app/features/trips/data/models/trip_model.dart';
 import 'package:trip_planner_app/features/trips/data/trip_store.dart';
+import 'package:trip_planner_app/features/trips/presentation/widgets/trip_color_picker.dart';
 
 class TripDetailScreen extends StatefulWidget {
   const TripDetailScreen({super.key, required this.tripId});
@@ -94,6 +96,8 @@ class _TripDetailScreenState extends State<TripDetailScreen>
         _syncTabController(trip.days.isEmpty ? 1 : trip.days.length);
 
         final isReadOnly = trip.role == TripRole.guest;
+        final tripColor = colorFromHex(trip.color);
+        final tripColorStrong = shadeColor(tripColor, amount: 0.28);
 
         return Scaffold(
           resizeToAvoidBottomInset: false,
@@ -110,17 +114,20 @@ class _TripDetailScreenState extends State<TripDetailScreen>
                       '/trips/${trip.id}/days/${currentDay.id}/stops/new',
                     );
                   },
-                  backgroundColor: AppColors.accent,
-                  foregroundColor: Colors.white,
+                  backgroundColor: tripColor,
+                  foregroundColor: onAccentColor(tripColor),
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('新增地點'),
                 ),
           body: Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFFF5F9FE), Color(0xFFDDE8F3)],
+                colors: [
+                  tintColor(tripColor, amount: 0.94),
+                  tintColor(tripColor, amount: 0.80),
+                ],
               ),
             ),
             child: SafeArea(
@@ -132,6 +139,7 @@ class _TripDetailScreenState extends State<TripDetailScreen>
                         _TripHeader(
                           title: trip.title,
                           isReadOnly: isReadOnly,
+                          accentColor: tripColorStrong,
                           onBackPressed: () => context.go('/trips'),
                           onActionSelected: (action) =>
                               _handleAction(context, trip, action),
@@ -139,6 +147,7 @@ class _TripDetailScreenState extends State<TripDetailScreen>
                         _TripSummaryCard(
                           trip: trip,
                           isReadOnly: isReadOnly,
+                          accentColor: tripColor,
                           onCopyShareCode: () => _copyShareCode(context, trip),
                           onOpenNavigation: () =>
                               context.go('/trips/${trip.id}/navigation'),
@@ -152,12 +161,16 @@ class _TripDetailScreenState extends State<TripDetailScreen>
                       delegate: _TripDayTabBarHeaderDelegate(
                         height: _tabBarHeaderHeight,
                         child: Container(
-                          color: const Color(0xFFEAF2F9),
+                          color: tintColor(tripColor, amount: 0.88),
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           alignment: Alignment.centerLeft,
                           child: TabBar(
                             controller: _tabController,
                             isScrollable: true,
+                            labelColor: tripColorStrong,
+                            unselectedLabelColor: AppColors.muted,
+                            indicatorColor: tripColor,
+                            dividerColor: Colors.transparent,
                             tabs: [
                               for (final day in trip.days)
                                 Tab(text: '${day.label} · ${day.dateLabel}'),
@@ -204,6 +217,9 @@ class _TripDetailScreenState extends State<TripDetailScreen>
         return;
       case _TripDetailAction.leaveTrip:
         await _leaveTrip(context, trip);
+        return;
+      case _TripDetailAction.changeColor:
+        await _changeTripColor(context, trip);
         return;
     }
   }
@@ -308,20 +324,58 @@ class _TripDetailScreenState extends State<TripDetailScreen>
       SnackBar(content: Text('已複製 ${trip.title} 的分享碼：$shareCode')),
     );
   }
+
+  Future<void> _changeTripColor(BuildContext context, TripSummary trip) async {
+    final nextColor = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => _TripColorSheet(
+        initialColor: trip.color ?? TripColors.defaultHex,
+      ),
+    );
+
+    if (!context.mounted ||
+        nextColor == null ||
+        nextColor == (trip.color ?? TripColors.defaultHex)) {
+      return;
+    }
+
+    try {
+      await _tripStore.updateTripColor(tripId: trip.id, color: nextColor);
+      if (!context.mounted) {
+        return;
+      }
+
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(const SnackBar(content: Text('已更新旅程顏色')));
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(SupabaseErrorFormatter.userMessage(error))),
+      );
+    }
+  }
 }
 
-enum _TripDetailAction { deleteTrip, leaveTrip }
+enum _TripDetailAction { deleteTrip, leaveTrip, changeColor }
 
 class _TripHeader extends StatelessWidget {
   const _TripHeader({
     required this.title,
     required this.isReadOnly,
+    required this.accentColor,
     required this.onBackPressed,
     required this.onActionSelected,
   });
 
   final String title;
   final bool isReadOnly;
+  final Color accentColor;
   final VoidCallback onBackPressed;
   final ValueChanged<_TripDetailAction> onActionSelected;
 
@@ -341,7 +395,10 @@ class _TripHeader extends StatelessWidget {
               style: Theme.of(context)
                   .textTheme
                   .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w800),
+                  ?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: accentColor,
+                  ),
             ),
           ),
           if (isReadOnly)
@@ -362,11 +419,15 @@ class _TripHeader extends StatelessWidget {
               onSelected: onActionSelected,
               itemBuilder: (context) => const [
                 PopupMenuItem(
+                  value: _TripDetailAction.changeColor,
+                  child: Text('更改顏色'),
+                ),
+                PopupMenuItem(
                   value: _TripDetailAction.deleteTrip,
                   child: Text('刪除旅程'),
                 ),
               ],
-              icon: const Icon(Icons.more_vert_rounded),
+              icon: Icon(Icons.more_vert_rounded, color: accentColor),
             ),
         ],
       ),
@@ -378,12 +439,14 @@ class _TripSummaryCard extends StatelessWidget {
   const _TripSummaryCard({
     required this.trip,
     required this.isReadOnly,
+    required this.accentColor,
     required this.onCopyShareCode,
     required this.onOpenNavigation,
   });
 
   final TripSummary trip;
   final bool isReadOnly;
+  final Color accentColor;
   final VoidCallback onCopyShareCode;
   final VoidCallback onOpenNavigation;
 
@@ -396,10 +459,13 @@ class _TripSummaryCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(28),
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFFFAFDFF), Color(0xFFE2EDF8)],
+            colors: [
+              tintColor(accentColor, amount: 0.97),
+              tintColor(accentColor, amount: 0.84),
+            ],
           ),
         ),
         child: Column(
@@ -408,13 +474,13 @@ class _TripSummaryCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: AppColors.accent.withValues(alpha: 0.08),
+                color: accentColor.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
                 trip.dateRange,
-                style: const TextStyle(
-                  color: AppColors.accentStrong,
+                style: TextStyle(
+                  color: shadeColor(accentColor, amount: 0.34),
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -429,23 +495,36 @@ class _TripSummaryCard extends StatelessWidget {
             ),
             if (!isReadOnly && trip.shareCode != null) ...[
               const SizedBox(height: 16),
-              _ShareCodePanel(
-                shareCode: trip.shareCode!,
-                onCopy: onCopyShareCode,
-              ),
-            ],
+                _ShareCodePanel(
+                  shareCode: trip.shareCode!,
+                  accentColor: accentColor,
+                  onCopy: onCopyShareCode,
+                ),
+              ],
             const SizedBox(height: 16),
             Wrap(
               spacing: 12,
               runSpacing: 12,
               children: [
-                _MiniStat(value: '${trip.days.length}', label: '天數'),
-                _MiniStat(value: '${trip.stopCount}', label: '停靠點'),
+                _MiniStat(
+                  value: '${trip.days.length}',
+                  label: '天數',
+                  accentColor: accentColor,
+                ),
+                _MiniStat(
+                  value: '${trip.stopCount}',
+                  label: '停靠點',
+                  accentColor: accentColor,
+                ),
               ],
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: onOpenNavigation,
+              style: FilledButton.styleFrom(
+                backgroundColor: accentColor,
+                foregroundColor: onAccentColor(accentColor),
+              ),
               icon: const Icon(Icons.navigation_outlined),
               label: const Text('開啟導航模式'),
             ),
@@ -487,9 +566,14 @@ class _TripDayTabBarHeaderDelegate extends SliverPersistentHeaderDelegate {
 }
 
 class _ShareCodePanel extends StatelessWidget {
-  const _ShareCodePanel({required this.shareCode, required this.onCopy});
+  const _ShareCodePanel({
+    required this.shareCode,
+    required this.accentColor,
+    required this.onCopy,
+  });
 
   final String shareCode;
+  final Color accentColor;
   final VoidCallback onCopy;
 
   @override
@@ -500,6 +584,7 @@ class _ShareCodePanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.82),
         borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: accentColor.withValues(alpha: 0.12)),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -513,6 +598,10 @@ class _ShareCodePanel extends StatelessWidget {
                 const SizedBox(height: 12),
                 FilledButton.icon(
                   onPressed: onCopy,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: accentColor,
+                    foregroundColor: onAccentColor(accentColor),
+                  ),
                   icon: const Icon(Icons.copy_rounded),
                   label: const Text('複製'),
                 ),
@@ -526,6 +615,10 @@ class _ShareCodePanel extends StatelessWidget {
               const SizedBox(width: 12),
               FilledButton.icon(
                 onPressed: onCopy,
+                style: FilledButton.styleFrom(
+                  backgroundColor: accentColor,
+                  foregroundColor: onAccentColor(accentColor),
+                ),
                 icon: const Icon(Icons.copy_rounded),
                 label: const Text('複製'),
               ),
@@ -570,10 +663,15 @@ class _ShareCodeContent extends StatelessWidget {
 }
 
 class _MiniStat extends StatelessWidget {
-  const _MiniStat({required this.value, required this.label});
+  const _MiniStat({
+    required this.value,
+    required this.label,
+    required this.accentColor,
+  });
 
   final String value;
   final String label;
+  final Color accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -584,20 +682,86 @@ class _MiniStat extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.76),
           borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: accentColor.withValues(alpha: 0.10)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
-                color: AppColors.text,
+                color: shadeColor(accentColor, amount: 0.34),
               ),
             ),
             const SizedBox(height: 4),
             Text(label),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TripColorSheet extends StatefulWidget {
+  const _TripColorSheet({required this.initialColor});
+
+  final String initialColor;
+
+  @override
+  State<_TripColorSheet> createState() => _TripColorSheetState();
+}
+
+class _TripColorSheetState extends State<_TripColorSheet> {
+  late String _selectedColor;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedColor = widget.initialColor;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accentColor = colorFromHex(_selectedColor);
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+        decoration: const BoxDecoration(
+          color: Color(0xFFF6FAFF),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('更改旅程顏色', style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 8),
+            const Text('新的顏色會同步顯示在旅程卡片與旅程詳情頁。'),
+            const SizedBox(height: 18),
+            TripColorPicker(
+              selectedColor: _selectedColor,
+              onColorChanged: (value) {
+                setState(() {
+                  _selectedColor = value;
+                });
+              },
+            ),
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(_selectedColor),
+              style: FilledButton.styleFrom(
+                backgroundColor: accentColor,
+                foregroundColor: onAccentColor(accentColor),
+                minimumSize: const Size.fromHeight(50),
+              ),
+              child: const Text('套用顏色'),
+            ),
           ],
         ),
       ),

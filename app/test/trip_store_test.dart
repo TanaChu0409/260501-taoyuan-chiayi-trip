@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trip_planner_app/features/trips/data/models/trip_model.dart';
+import 'package:trip_planner_app/features/trips/data/trip_service.dart';
+import 'package:trip_planner_app/features/trips/data/trip_store.dart';
 
 void main() {
   test('stop item json roundtrip preserves fields', () {
@@ -79,4 +81,65 @@ void main() {
 
     expect(sorted.map((stop) => stop.title).toList(), ['A 點', 'B 點', 'C 點']);
   });
+
+  test('trip summary copyWith can keep and replace color', () {
+    const trip = TripSummary(
+      id: 'trip-1',
+      title: '測試旅程',
+      dateRange: '2026/05/01 - 2026/05/02',
+      role: TripRole.owner,
+      days: [],
+      color: '#003D79',
+    );
+
+    final updated = trip.copyWith(color: '#F97316');
+
+    expect(trip.color, '#003D79');
+    expect(updated.color, '#F97316');
+    expect(updated.title, trip.title);
+  });
+
+  test('trip store updates local trip color after service update', () async {
+    final service = _FakeTripService(
+      trips: const [
+        TripSummary(
+          id: 'trip-1',
+          title: '測試旅程',
+          dateRange: '2026/05/01 - 2026/05/02',
+          role: TripRole.owner,
+          days: [],
+        ),
+      ],
+    );
+    final store = TripStore(tripService: service);
+
+    await store.ensureLoaded();
+    await store.updateTripColor(tripId: 'trip-1', color: '#15803D');
+
+    expect(service.updatedTripId, 'trip-1');
+    expect(service.updatedColor, '#15803D');
+    expect(store.trips.single.color, '#15803D');
+  });
+}
+
+class _FakeTripService extends TripService {
+  _FakeTripService({required this.trips});
+
+  final List<TripSummary> trips;
+  String? updatedTripId;
+  String? updatedColor;
+
+  @override
+  Future<List<TripSummary>> fetchTripsForCurrentUser() async {
+    return trips;
+  }
+
+  @override
+  Future<void> updateTripColor({
+    required String tripId,
+    required String color,
+  }) async {
+    updatedTripId = tripId;
+    updatedColor = color;
+  }
 }
