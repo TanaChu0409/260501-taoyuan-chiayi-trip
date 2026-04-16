@@ -118,7 +118,10 @@ class TripService {
       'join_trip_by_code',
       params: {'p_share_code': normalizedCode},
     );
-    final payload = Map<String, dynamic>.from(response as Map);
+    if (response is! Map) {
+      throw StateError('Unexpected join_trip_by_code response: $response');
+    }
+    final payload = Map<String, dynamic>.from(response);
     final status = joinTripByCodeStatusFromBackend(payload['status'] as String?);
     if (status != JoinTripByCodeStatus.success) {
       return JoinTripByCodeResult(status: status);

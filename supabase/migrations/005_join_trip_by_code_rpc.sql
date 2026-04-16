@@ -9,6 +9,7 @@ declare
   current_user_id uuid := auth.uid();
   target_trip_id uuid;
   target_owner_id uuid;
+  inserted_rows integer := 0;
 begin
   if current_user_id is null then
     raise exception 'User must be signed in.' using errcode = 'P0001';
@@ -39,7 +40,9 @@ begin
   values (target_trip_id, current_user_id)
   on conflict (trip_id, user_id) do nothing;
 
-  if found then
+  get diagnostics inserted_rows = row_count;
+
+  if inserted_rows > 0 then
     return jsonb_build_object(
       'status', 'success',
       'trip_id', target_trip_id
