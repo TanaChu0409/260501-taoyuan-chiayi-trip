@@ -16,7 +16,7 @@ begin
       using errcode = '28000';
   end if;
 
-  if normalized_code is null or normalized_code = '' then
+  if normalized_code = '' then
     return jsonb_build_object('status', 'trip_not_found');
   end if;
 
