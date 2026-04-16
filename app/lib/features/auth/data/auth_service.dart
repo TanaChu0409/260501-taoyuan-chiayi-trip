@@ -39,11 +39,11 @@ class AuthService {
   }
 
   /// Redirect URI sent to Supabase.
-  /// - Web: the current page origin (Supabase redirects back here).
+  /// - Web: the current page URL without hash/query so GitHub Pages subpaths work.
   /// - Mobile: a custom deep-link scheme registered in AndroidManifest / Info.plist.
   static String get _oauthRedirectTo {
     if (kIsWeb) {
-      return Uri.base.origin;
+      return Uri.base.removeFragment().replace(query: '').toString();
     }
     return 'com.example.tripplannerapp://login-callback';
   }
