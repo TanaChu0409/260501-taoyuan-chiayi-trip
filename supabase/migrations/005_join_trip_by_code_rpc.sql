@@ -13,7 +13,7 @@ declare
 begin
   if current_user_id is null then
     raise exception 'Authentication required: user must be authenticated to join a trip.'
-      using errcode = 'P0001';
+      using errcode = '28000';
   end if;
 
   if normalized_code is null or normalized_code = '' then

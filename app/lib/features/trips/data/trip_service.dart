@@ -145,7 +145,7 @@ class TripService {
     final tripId = rawTripId as String?;
     if (tripId == null || tripId.isEmpty) {
       throw StateError(
-        'Server error: join_trip_by_code returned success status without the required trip_id field.',
+        'Invalid join_trip_by_code RPC response: success status was missing the required trip_id field.',
       );
     }
     final trip = await fetchTripById(tripId, role: TripRole.guest);
