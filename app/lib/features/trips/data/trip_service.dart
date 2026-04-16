@@ -113,39 +113,43 @@ class TripService {
   }
 
   Future<JoinTripByCodeResult> joinTripByCode(String rawCode) async {
-    final userId = _requireUserId();
+    if (_client.auth.currentUser?.id == null) {
+      throw StateError('User must be signed in.');
+    }
     final normalizedCode = rawCode.trim().toUpperCase();
-    final rows = await _client
-        .from('trips')
-        .select('id, owner_id')
-        .eq('share_code', normalizedCode)
-        .limit(1);
-
-    if (rows.isEmpty) {
-      return const JoinTripByCodeResult(
-          status: JoinTripByCodeStatus.tripNotFound);
+    final response = await _client.rpc(
+      'join_trip_by_code',
+      params: {'p_share_code': normalizedCode},
+    );
+    if (response is! Map) {
+      throw StateError(
+        'Expected Map response from join_trip_by_code RPC, but received ${response.runtimeType}: $response',
+      );
+    }
+    final payload = Map<String, dynamic>.from(response);
+    final rawStatus = payload['status'];
+    if (rawStatus != null && rawStatus is! String) {
+      throw StateError(
+        'Expected string status from join_trip_by_code RPC, but received: $rawStatus',
+      );
+    }
+    final status = joinTripByCodeStatusFromBackend(rawStatus as String?);
+    if (status != JoinTripByCodeStatus.success) {
+      return JoinTripByCodeResult(status: status);
     }
 
-    final row = Map<String, dynamic>.from(rows.first);
-    final tripId = row['id'] as String;
-    if (row['owner_id'] == userId) {
-      return const JoinTripByCodeResult(
-          status: JoinTripByCodeStatus.alreadyJoined);
+    final rawTripId = payload['trip_id'];
+    if (rawTripId != null && rawTripId is! String) {
+      throw StateError(
+        'Expected string trip_id from join_trip_by_code RPC, but received: $rawTripId',
+      );
     }
-
-    try {
-      await _client.from('shared_access').insert({
-        'trip_id': tripId,
-        'user_id': userId,
-      });
-    } on PostgrestException catch (error) {
-      if (error.code == '23505') {
-        return const JoinTripByCodeResult(
-            status: JoinTripByCodeStatus.alreadyJoined);
-      }
-      rethrow;
+    final tripId = rawTripId as String?;
+    if (tripId == null || tripId.isEmpty) {
+      throw StateError(
+        'Invalid join_trip_by_code RPC response: success status was missing the required trip_id field.',
+      );
     }
-
     final trip = await fetchTripById(tripId, role: TripRole.guest);
     if (trip == null) {
       return const JoinTripByCodeResult(

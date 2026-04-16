@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:trip_planner_app/core/supabase/supabase_error_formatter.dart';
-import 'package:trip_planner_app/core/theme/app_theme.dart';
 import 'package:trip_planner_app/features/auth/data/auth_service.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
