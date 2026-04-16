@@ -12,7 +12,8 @@ declare
   inserted_rows integer := 0;
 begin
   if current_user_id is null then
-    raise exception 'User must be signed in.' using errcode = 'P0001';
+    raise exception 'Authentication required: user must be authenticated to join a trip.'
+      using errcode = 'P0001';
   end if;
 
   if normalized_code is null or normalized_code = '' then

@@ -130,7 +130,9 @@ class TripService {
 
     final tripId = payload['trip_id'] as String?;
     if (tripId == null || tripId.isEmpty) {
-      throw StateError('join_trip_by_code returned success without trip_id.');
+      throw StateError(
+        'Server error: join_trip_by_code returned success status without the required trip_id field.',
+      );
     }
     final trip = await fetchTripById(tripId, role: TripRole.guest);
     if (trip == null) {
