@@ -113,39 +113,23 @@ class TripService {
   }
 
   Future<JoinTripByCodeResult> joinTripByCode(String rawCode) async {
-    final userId = _requireUserId();
     final normalizedCode = rawCode.trim().toUpperCase();
-    final rows = await _client
-        .from('trips')
-        .select('id, owner_id')
-        .eq('share_code', normalizedCode)
-        .limit(1);
+    final response = await _client.rpc(
+      'join_trip_by_code',
+      params: {'p_share_code': normalizedCode},
+    );
+    final payload = Map<String, dynamic>.from(response as Map);
+    final status = joinTripByCodeStatusFromBackend(payload['status'] as String?);
+    if (status != JoinTripByCodeStatus.success) {
+      return JoinTripByCodeResult(status: status);
+    }
 
-    if (rows.isEmpty) {
+    final tripId = payload['trip_id'] as String?;
+    if (tripId == null || tripId.isEmpty) {
       return const JoinTripByCodeResult(
-          status: JoinTripByCodeStatus.tripNotFound);
+        status: JoinTripByCodeStatus.tripNotFound,
+      );
     }
-
-    final row = Map<String, dynamic>.from(rows.first);
-    final tripId = row['id'] as String;
-    if (row['owner_id'] == userId) {
-      return const JoinTripByCodeResult(
-          status: JoinTripByCodeStatus.alreadyJoined);
-    }
-
-    try {
-      await _client.from('shared_access').insert({
-        'trip_id': tripId,
-        'user_id': userId,
-      });
-    } on PostgrestException catch (error) {
-      if (error.code == '23505') {
-        return const JoinTripByCodeResult(
-            status: JoinTripByCodeStatus.alreadyJoined);
-      }
-      rethrow;
-    }
-
     final trip = await fetchTripById(tripId, role: TripRole.guest);
     if (trip == null) {
       return const JoinTripByCodeResult(
