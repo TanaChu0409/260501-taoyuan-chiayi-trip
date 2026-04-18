@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:trip_planner_app/features/notifications/services/notification_service.dart';
 import 'package:trip_planner_app/features/trip_detail/data/parking_spot_service.dart';
@@ -24,6 +26,13 @@ class TripStore extends ChangeNotifier {
   bool _isLoading = false;
   bool _isInitialized = false;
   Object? _loadError;
+
+  /// Monotonically-increasing token that is incremented each time
+  /// [clearForSignOut] is called.  [_loadTrips] captures the value at the
+  /// start of every load and discards its results if the token has changed by
+  /// the time the async work completes (i.e. a sign-out raced the in-flight
+  /// load).
+  int _sessionToken = 0;
 
   List<TripSummary> get trips => List<TripSummary>.unmodifiable(_trips);
   bool get isLoading => _isLoading;
@@ -424,6 +433,7 @@ class TripStore extends ChangeNotifier {
   }
 
   void resetForTests() {
+    _sessionToken++;
     _trips.clear();
     _membersByTripId.clear();
     NotificationService.instance.resetForTests();
@@ -435,7 +445,47 @@ class TripStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Clears all cached data and cancels the Realtime subscription.
+  /// Call this whenever the current user signs out so that the next user
+  /// starts with a clean slate and the old Realtime channel is released.
+  ///
+  /// The session token is incremented synchronously before any async work so
+  /// that any in-flight [_loadTrips] call will see the changed token and
+  /// discard its results rather than repopulating the store.
+  Future<void> clearForSignOut() async {
+    _sessionToken++;           // synchronous – happens before any await
+    await _realtimeService.unsubscribe();
+    _trips.clear();
+    _membersByTripId.clear();
+    NotificationService.instance.clearTrackedReminders();
+    _loadFuture = null;
+    _isLoading = false;
+    _isInitialized = false;
+    _loadError = null;
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    // Flutter's dispose() is synchronous and cannot be made async.
+    // unsubscribe() is fire-and-forget here; errors are caught and logged so
+    // they don't become noisy unhandled zone-level exceptions during teardown.
+    // The main cleanup path for production code is clearForSignOut(), which
+    // does await the unsubscribe.
+    unawaited(
+      _realtimeService.unsubscribe().catchError((Object error, StackTrace st) {
+        debugPrint('TripStore.dispose: unsubscribe failed: $error');
+      }),
+    );
+    super.dispose();
+  }
+
   Future<void> _loadTrips() async {
+    // Capture the session token at the start.  If clearForSignOut() is called
+    // while this load is in-flight, the token will be incremented and we will
+    // discard the stale results rather than repopulating the store.
+    final token = _sessionToken;
+
     _isLoading = true;
     if (!_isInitialized) {
       notifyListeners();
@@ -443,27 +493,40 @@ class TripStore extends ChangeNotifier {
 
     try {
       final loadedTrips = await _tripService.fetchTripsForCurrentUser();
+
+      // If the session changed while we were waiting, discard results.
+      if (_sessionToken != token) return;
+
       _trips
         ..clear()
         ..addAll(loadedTrips);
       _loadError = null;
       _isInitialized = true;
-      NotificationService.instance.resetForTests();
+      NotificationService.instance.clearTrackedReminders();
       for (final trip in _trips) {
         await NotificationService.instance.scheduleTripReminders(trip);
       }
+      // Guard again: reminders scheduling is also async.
+      if (_sessionToken != token) return;
+
       // Subscribe to Realtime for permission/removal changes.
-      _realtimeService.subscribe(
+      await _realtimeService.subscribe(
         onPermissionChanged: _onPermissionChanged,
         onRemovedFromTrip: _onRemovedFromTrip,
       );
+
+      // Final guard: drop the notifyListeners() if the session changed.
+      if (_sessionToken != token) return;
     } catch (error) {
+      if (_sessionToken != token) return;
       _loadError = error;
       _isInitialized = true;
     } finally {
-      _isLoading = false;
-      _loadFuture = null;
-      notifyListeners();
+      if (_sessionToken == token) {
+        _isLoading = false;
+        _loadFuture = null;
+        notifyListeners();
+      }
     }
   }
 
@@ -528,28 +591,31 @@ class TripStore extends ChangeNotifier {
     final normalized = _normalizeParkingSpots(next);
     final previousIds =
         previous.map((item) => item.id).whereType<String>().toSet();
-    final saved = <ParkingSpot>[];
 
-    for (final parkingSpot in normalized) {
-      if (parkingSpot.id != null && previousIds.contains(parkingSpot.id)) {
-        final updated =
-            await _parkingSpotService.updateParkingSpot(parkingSpot);
-        saved.add(updated.copyWith(sortOrder: parkingSpot.sortOrder));
-      } else {
-        final created = await _parkingSpotService.createParkingSpot(
-          stopId: stopId,
-          parkingSpot: parkingSpot.copyWith(id: null),
-        );
-        saved.add(created.copyWith(sortOrder: parkingSpot.sortOrder));
-      }
-    }
+    // Create / update all spots in parallel to reduce round-trip latency.
+    final saved = await Future.wait(
+      normalized.map((parkingSpot) async {
+        if (parkingSpot.id != null && previousIds.contains(parkingSpot.id)) {
+          final updated =
+              await _parkingSpotService.updateParkingSpot(parkingSpot);
+          return updated.copyWith(sortOrder: parkingSpot.sortOrder);
+        } else {
+          final created = await _parkingSpotService.createParkingSpot(
+            stopId: stopId,
+            parkingSpot: parkingSpot.copyWith(id: null),
+          );
+          return created.copyWith(sortOrder: parkingSpot.sortOrder);
+        }
+      }),
+    );
 
+    // Delete removed spots in parallel.
     final savedIds = saved.map((item) => item.id).whereType<String>().toSet();
-    for (final removed in previous) {
-      if (removed.id != null && !savedIds.contains(removed.id)) {
-        await _parkingSpotService.deleteParkingSpot(removed.id!);
-      }
-    }
+    await Future.wait([
+      for (final removed in previous)
+        if (removed.id != null && !savedIds.contains(removed.id))
+          _parkingSpotService.deleteParkingSpot(removed.id!),
+    ]);
 
     await _parkingSpotService.reorderParkingSpots(
         stopId: stopId, parkingSpots: saved);
