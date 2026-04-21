@@ -641,6 +641,11 @@ class _JoinTripSheetState extends State<_JoinTripSheet> {
       messenger.showSnackBar(const SnackBar(content: Text('請先輸入分享碼')));
       return;
     }
+    if (code.length != 8) {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(const SnackBar(content: Text('分享碼必須是 8 個字元')));
+      return;
+    }
 
     setState(() {
       _isSubmitting = true;
