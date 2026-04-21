@@ -12,7 +12,9 @@ class TripService {
 
   static const _alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-  final Random _random = Random();
+  // Use a cryptographically secure RNG so share codes cannot be predicted
+  // by an attacker who knows the approximate generation time.
+  final Random _random = Random.secure();
 
   SupabaseClient get _client => Supabase.instance.client;
 
@@ -209,11 +211,14 @@ class TripService {
   }
 
   Future<void> updateTripColor(String tripId, String? color) async {
-    // RLS enforces that only owners and editors can update trips.
-    await _client
-        .from('trips')
-        .update({'color': color})
-        .eq('id', tripId);
+    // Calls a SECURITY DEFINER RPC that only updates the color column.
+    // A direct table UPDATE is intentionally avoided: the previous
+    // trips_editor_update_color RLS policy would have allowed editors to
+    // overwrite any field (including owner_id), which the RPC prevents.
+    await _client.rpc(
+      'update_trip_color',
+      params: {'p_trip_id': tripId, 'p_color': color},
+    );
   }
 
   /// Fetch all members (guests) for a trip, joined with their profiles.
@@ -443,8 +448,12 @@ class TripService {
   }
 
   String _generateShareCode() {
+    // 8 characters from a 32-symbol alphabet gives ~1 trillion combinations
+    // (~32^8), making brute-force enumeration infeasible even without rate
+    // limiting. Combined with the server-side rate limit (migration 014) this
+    // provides defence-in-depth.
     final buffer = StringBuffer();
-    for (var index = 0; index < 6; index += 1) {
+    for (var index = 0; index < 8; index += 1) {
       buffer.write(_alphabet[_random.nextInt(_alphabet.length)]);
     }
     return buffer.toString();
