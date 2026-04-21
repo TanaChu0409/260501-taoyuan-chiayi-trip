@@ -233,9 +233,9 @@ class TripService {
       return const [];
     }
 
-    final userIds = {
+    final userIds = <String>{
       for (final row in rows) (row as Map<String, dynamic>)['user_id'] as String,
-    }.toList(growable: false);
+    };
 
     final profileRows = await _client
         .from('profiles_public')
@@ -249,19 +249,10 @@ class TripService {
 
     return [
       for (final row in rows)
-        (() {
-          final json = Map<String, dynamic>.from(row as Map);
-          final profile = profileByUserId[json['user_id'] as String];
-          return TripMember(
-            id: json['id'] as String,
-            userId: json['user_id'] as String,
-            displayName: profile?['display_name'] as String? ?? '未知使用者',
-            email: null,
-            avatarUrl: profile?['avatar_url'] as String?,
-            permission: tripPermissionFromBackend(json['permission'] as String?),
-            joinedAt: DateTime.parse(json['joined_at'] as String),
-          );
-        })(),
+        _tripMemberFromSharedAccessRow(
+          Map<String, dynamic>.from(row as Map),
+          profileByUserId,
+        ),
     ];
   }
 
@@ -511,5 +502,15 @@ class TripService {
       return labels[value];
     }
     return value.toString();
+  }
+
+  TripMember _tripMemberFromSharedAccessRow(
+    Map<String, dynamic> row,
+    Map<String, Map<String, dynamic>> profileByUserId,
+  ) {
+    row['profiles'] =
+        profileByUserId[row['user_id'] as String] ??
+        const <String, dynamic>{};
+    return TripMember.fromJson(row);
   }
 }

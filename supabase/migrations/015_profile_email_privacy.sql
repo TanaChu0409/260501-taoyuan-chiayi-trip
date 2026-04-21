@@ -47,8 +47,10 @@ where auth.uid() is not null
     or exists (
       select 1
       from public.shared_access sa
+      join public.trips t
+        on t.id = sa.trip_id
       where sa.user_id = p.id
-        and public.is_trip_owner(sa.trip_id)
+        and t.owner_id = auth.uid()
     )
   );
 
