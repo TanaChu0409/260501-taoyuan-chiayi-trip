@@ -21,6 +21,8 @@ alter table public.join_code_attempts enable row level security;
 -- Purge attempts older than 24 hours to keep the table small.
 -- This must be invoked by an explicit scheduled job (for example, Supabase cron);
 -- indexes improve lookup performance but do not remove old rows automatically.
+-- Schedule `select public.purge_join_code_attempts();` on an interval (for
+-- example, hourly) to enforce retention.
 create or replace function public.purge_join_code_attempts()
 returns void
 language sql
