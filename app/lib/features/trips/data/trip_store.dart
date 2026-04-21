@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:trip_planner_app/features/notifications/services/notification_service.dart';
 import 'package:trip_planner_app/features/trip_detail/data/parking_spot_service.dart';
 import 'package:trip_planner_app/features/trip_detail/data/stop_service.dart';
-import 'package:trip_planner_app/features/trips/data/join_trip_result.dart';
+import 'package:trip_planner_app/features/trips/data/invite_member_result.dart';
 import 'package:trip_planner_app/features/trips/data/models/trip_member.dart';
 import 'package:trip_planner_app/features/trips/data/models/trip_model.dart';
 import 'package:trip_planner_app/features/trips/data/trip_realtime_service.dart';
@@ -332,17 +332,13 @@ class TripStore extends ChangeNotifier {
     return trip;
   }
 
-  Future<JoinTripByCodeResult> joinTripByCode(String rawCode) async {
-    final result = await _tripService.joinTripByCode(rawCode);
-    if (!result.isSuccess || result.trip == null) {
-      return result;
-    }
-
-    _trips.removeWhere((trip) => trip.id == result.trip!.id);
-    _trips.add(result.trip!);
-    await NotificationService.instance.scheduleTripReminders(result.trip!);
-    notifyListeners();
-    return result;
+  /// Invite a user to a trip by their Gmail address (owner-only).
+  Future<InviteMemberResult> inviteMemberByEmail(
+    String tripId,
+    String email,
+    TripPermission permission,
+  ) async {
+    return _tripService.inviteMemberByEmail(tripId, email, permission);
   }
 
   Future<bool> deleteTrip(String tripId) async {

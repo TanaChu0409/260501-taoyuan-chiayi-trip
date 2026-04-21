@@ -1,7 +1,5 @@
-import 'dart:math';
-
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:trip_planner_app/features/trips/data/join_trip_result.dart';
+import 'package:trip_planner_app/features/trips/data/invite_member_result.dart';
 import 'package:trip_planner_app/features/trips/data/models/trip_member.dart';
 import 'package:trip_planner_app/features/trips/data/models/trip_model.dart';
 
@@ -9,12 +7,6 @@ class TripService {
   TripService._();
 
   static final TripService instance = TripService._();
-
-  static const _alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
-  // Use a cryptographically secure RNG so share codes cannot be predicted
-  // by an attacker who knows the approximate generation time.
-  final Random _random = Random.secure();
 
   SupabaseClient get _client => Supabase.instance.client;
 
@@ -67,43 +59,30 @@ class TripService {
     String? color,
   }) async {
     final userId = _requireUserId();
+    final tripRow = await _client
+        .from('trips')
+        .insert({
+          'title': title,
+          'start_date': _toIsoDate(startDate),
+          'end_date': _toIsoDate(endDate),
+          'owner_id': userId,
+          'color': color,
+        })
+        .select('id, title, start_date, end_date, share_code, color')
+        .single();
 
-    for (var attempt = 0; attempt < 5; attempt += 1) {
-      final shareCode = _generateShareCode();
-      try {
-        final tripRow = await _client
-            .from('trips')
-            .insert({
-              'title': title,
-              'start_date': _toIsoDate(startDate),
-              'end_date': _toIsoDate(endDate),
-              'owner_id': userId,
-              'share_code': shareCode,
-              'color': color,
-            })
-            .select('id, title, start_date, end_date, share_code, color')
-            .single();
+    final tripId = tripRow['id'] as String;
+    final dayRows = _buildDayRows(
+      tripId: tripId,
+      startDate: startDate,
+      endDate: endDate,
+    );
 
-        final tripId = tripRow['id'] as String;
-        final dayRows = _buildDayRows(
-          tripId: tripId,
-          startDate: startDate,
-          endDate: endDate,
-        );
-
-        if (dayRows.isNotEmpty) {
-          await _client.from('days').insert(dayRows);
-        }
-
-        return (await fetchTripById(tripId, role: TripRole.owner))!;
-      } on PostgrestException catch (error) {
-        if (error.code != '23505') {
-          rethrow;
-        }
-      }
+    if (dayRows.isNotEmpty) {
+      await _client.from('days').insert(dayRows);
     }
 
-    throw StateError('Unable to generate a unique share code.');
+    return (await fetchTripById(tripId, role: TripRole.owner))!;
   }
 
   Future<TripSummary?> fetchTripById(
@@ -134,58 +113,28 @@ class TripService {
     return trips.isEmpty ? null : trips.first;
   }
 
-  Future<JoinTripByCodeResult> joinTripByCode(String rawCode) async {
-    if (_client.auth.currentUser?.id == null) {
-      throw StateError('User must be signed in.');
-    }
-    final normalizedCode = rawCode.trim().toUpperCase();
+  /// Invite a user to a trip by their Gmail address (owner-only).
+  Future<InviteMemberResult> inviteMemberByEmail(
+    String tripId,
+    String email,
+    TripPermission permission,
+  ) async {
     final response = await _client.rpc(
-      'join_trip_by_code',
-      params: {'p_share_code': normalizedCode},
+      'invite_member_by_email',
+      params: {
+        'p_trip_id': tripId,
+        'p_email': email.trim().toLowerCase(),
+        'p_permission': permission.name,
+      },
     );
     if (response is! Map) {
       throw StateError(
-        'Expected Map response from join_trip_by_code RPC, but received ${response.runtimeType}: $response',
+        'Expected Map response from invite_member_by_email RPC, but received ${response.runtimeType}: $response',
       );
     }
     final payload = Map<String, dynamic>.from(response);
-    final rawStatus = payload['status'];
-    if (rawStatus != null && rawStatus is! String) {
-      throw StateError(
-        'Expected string status from join_trip_by_code RPC, but received: $rawStatus',
-      );
-    }
-    final status = joinTripByCodeStatusFromBackend(rawStatus as String?);
-    if (status != JoinTripByCodeStatus.success) {
-      return JoinTripByCodeResult(status: status);
-    }
-
-    final rawTripId = payload['trip_id'];
-    if (rawTripId != null && rawTripId is! String) {
-      throw StateError(
-        'Expected string trip_id from join_trip_by_code RPC, but received: $rawTripId',
-      );
-    }
-    final tripId = rawTripId as String?;
-    if (tripId == null || tripId.isEmpty) {
-      throw StateError(
-        'Invalid join_trip_by_code RPC response: success status was missing the required trip_id field.',
-      );
-    }
-    final rawPermission = payload['permission'] as String?;
-    final permission = tripPermissionFromBackend(rawPermission);
-    final trip = await fetchTripById(
-      tripId,
-      role: TripRole.guest,
-      permission: permission,
-    );
-    if (trip == null) {
-      return const JoinTripByCodeResult(
-          status: JoinTripByCodeStatus.tripNotFound);
-    }
-
-    return JoinTripByCodeResult(
-        status: JoinTripByCodeStatus.success, trip: trip);
+    final status = inviteMemberStatusFromBackend(payload['status'] as String?);
+    return InviteMemberResult(status: status);
   }
 
   Future<bool> deleteOwnedTrip(String tripId) async {
@@ -234,7 +183,7 @@ class TripService {
     }
 
     final userIds = <String>{
-      for (final row in rows) (row as Map<String, dynamic>)['user_id'] as String,
+      for (final row in rows) row['user_id'] as String,
     };
 
     final profileRows = await _client
@@ -467,18 +416,6 @@ class TripService {
       throw StateError('User must be signed in.');
     }
     return userId;
-  }
-
-  String _generateShareCode() {
-    // 8 characters from a 32-symbol alphabet gives ~1 trillion combinations
-    // (~32^8), making brute-force enumeration infeasible even without rate
-    // limiting. Combined with the server-side rate limit (migration 014) this
-    // provides defence-in-depth.
-    final buffer = StringBuffer();
-    for (var index = 0; index < 8; index += 1) {
-      buffer.write(_alphabet[_random.nextInt(_alphabet.length)]);
-    }
-    return buffer.toString();
   }
 
   String _toIsoDate(DateTime value) {
