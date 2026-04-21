@@ -56,7 +56,7 @@ begin
     return jsonb_build_object('status', 'trip_not_found');
   end if;
 
-  -- Record this attempt before querying so even empty-code calls count.
+  -- Record this non-empty attempt before querying the trips table.
   insert into public.join_code_attempts (user_id) values (current_user_id);
 
   select id, owner_id
