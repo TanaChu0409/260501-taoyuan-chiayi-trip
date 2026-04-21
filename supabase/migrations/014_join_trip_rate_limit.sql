@@ -41,6 +41,9 @@ begin
       using errcode = '28000';
   end if;
 
+  -- Serialize attempts per user so the count-and-insert check is atomic.
+  perform pg_advisory_xact_lock(hashtext(current_user_id::text));
+
   -- Rate limit: at most 20 join attempts per user per hour.
   select count(*) into recent_attempts
   from public.join_code_attempts
