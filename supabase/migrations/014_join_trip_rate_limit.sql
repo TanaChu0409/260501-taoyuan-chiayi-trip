@@ -27,6 +27,7 @@ create or replace function public.purge_join_code_attempts()
 returns void
 language sql
 security definer
+-- Runs with function-owner privileges; keep execution restricted to service-side roles.
 set search_path = public
 as $$
   delete from public.join_code_attempts
