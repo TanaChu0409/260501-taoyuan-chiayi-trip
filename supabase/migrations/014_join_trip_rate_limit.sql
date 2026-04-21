@@ -35,15 +35,19 @@ declare
   target_owner_id  uuid;
   rows_affected    integer := 0;
   recent_attempts  integer;
+  lock_hash        text;
 begin
   if current_user_id is null then
     raise exception 'Authentication required: user must be authenticated to join a trip.'
       using errcode = '28000';
   end if;
 
+  lock_hash := md5(current_user_id::text);
+
   -- Serialize attempts per user so the count-and-insert check is atomic.
   perform pg_advisory_xact_lock(
-    ('x' || substr(md5(current_user_id::text), 1, 16))::bit(64)::bigint
+    ('x' || substr(lock_hash, 1, 8))::bit(32)::int,
+    ('x' || substr(lock_hash, 9, 8))::bit(32)::int
   );
 
   -- Rate limit: at most 20 join attempts per user per hour.
