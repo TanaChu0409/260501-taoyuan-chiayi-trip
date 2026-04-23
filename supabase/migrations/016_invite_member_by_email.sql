@@ -104,12 +104,12 @@ begin
     and attempted_at > now() - interval '1 hour';
 
   if recent_attempts >= 20 then
-    raise exception 'Too many invite attempts. Please wait up to an hour before trying again.'
+    raise exception 'Too many invite attempts. Please wait an hour before trying again.'
       using errcode = '53400';
   end if;
 
   if normalised = '' then
-    raise exception 'Email address is required.'
+    raise exception 'A valid email address is required.'
       using errcode = '22023';
   end if;
 
