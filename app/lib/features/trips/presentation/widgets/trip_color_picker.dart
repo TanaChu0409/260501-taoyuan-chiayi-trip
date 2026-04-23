@@ -75,28 +75,26 @@ class TripColorPicker extends StatelessWidget {
     );
     Color pickedColor = initialColor;
     String? hexError;
-    var isUpdatingHexFromPicker = false;
+    bool isUpdatingHexFromPicker = false;
 
     void syncHexController(Color color) {
       final nextHex = hexFromColor(color).replaceFirst('#', '');
       final currentValue = hexController.value;
       final selection = currentValue.selection;
       final nextLength = nextHex.length;
-      final nextBaseOffset = selection.isValid
-          ? selection.baseOffset.clamp(0, nextLength) as int
-          : nextLength;
-      final nextExtentOffset = selection.isValid
-          ? selection.extentOffset.clamp(0, nextLength) as int
-          : nextLength;
+
+      int clampSelectionOffset(int offset) =>
+          selection.isValid ? offset.clamp(0, nextLength) : nextLength;
 
       isUpdatingHexFromPicker = true;
       hexController.value = TextEditingValue(
         text: nextHex,
         selection: TextSelection(
-          baseOffset: nextBaseOffset,
-          extentOffset: nextExtentOffset,
+          baseOffset: clampSelectionOffset(selection.baseOffset),
+          extentOffset: clampSelectionOffset(selection.extentOffset),
         ),
         composing: currentValue.composing.isValid &&
+                currentValue.composing.start <= nextLength &&
                 currentValue.composing.end <= nextLength
             ? currentValue.composing
             : TextRange.empty,
