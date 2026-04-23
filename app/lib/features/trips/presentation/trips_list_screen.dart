@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:trip_planner_app/core/supabase/supabase_error_formatter.dart';
 import 'package:trip_planner_app/core/theme/app_theme.dart';
 import 'package:trip_planner_app/features/auth/data/auth_service.dart';
-import 'package:trip_planner_app/features/trips/data/join_trip_result.dart';
 import 'package:trip_planner_app/features/trips/data/models/trip_model.dart';
 import 'package:trip_planner_app/features/trips/data/trip_store.dart';
 import 'package:trip_planner_app/features/trips/presentation/widgets/trip_color_picker.dart';
@@ -89,10 +87,8 @@ class _TripsListScreenState extends ConsumerState<TripsListScreen> {
                     ),
                     const SizedBox(height: 24),
                   ],
-                  _SectionHeader(
+                  const _SectionHeader(
                     title: '我的旅程',
-                    actionLabel: '邀請碼加入',
-                    onPressed: () => _showJoinTripSheet(context),
                   ),
                   const SizedBox(height: 12),
                   if (!isLoading && ownedTrips.isEmpty)
@@ -250,25 +246,6 @@ class _TripsListScreenState extends ConsumerState<TripsListScreen> {
     );
   }
 
-  Future<void> _showJoinTripSheet(BuildContext context) async {
-    final joinedTrip = await showModalBottomSheet<TripSummary>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => const _JoinTripSheet(),
-    );
-
-    if (!context.mounted || joinedTrip == null) {
-      return;
-    }
-
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(content: Text('已透過分享碼加入：${joinedTrip.title}')),
-    );
-    context.go('/trips/${joinedTrip.id}');
-  }
 }
 
 class _CreateTripSheet extends StatefulWidget {
@@ -545,11 +522,9 @@ class _SummaryCard extends StatelessWidget {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, this.actionLabel, this.onPressed});
+  const _SectionHeader({required this.title});
 
   final String title;
-  final String? actionLabel;
-  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -564,126 +539,8 @@ class _SectionHeader extends StatelessWidget {
                 ?.copyWith(fontWeight: FontWeight.w800),
           ),
         ),
-        if (actionLabel != null && onPressed != null)
-          TextButton(onPressed: onPressed, child: Text(actionLabel!)),
       ],
     );
-  }
-}
-
-class _JoinTripSheet extends StatefulWidget {
-  const _JoinTripSheet();
-
-  @override
-  State<_JoinTripSheet> createState() => _JoinTripSheetState();
-}
-
-class _JoinTripSheetState extends State<_JoinTripSheet> {
-  final TextEditingController _codeController = TextEditingController();
-  bool _isSubmitting = false;
-
-  @override
-  void dispose() {
-    _codeController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding:
-          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-        decoration: const BoxDecoration(
-          color: Color(0xFFF6FAFF),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('邀請碼加入', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 8),
-            const Text('輸入 8 碼分享碼後，加入旅程並開始協作（可編輯）。'),
-            const SizedBox(height: 18),
-            TextField(
-              controller: _codeController,
-              maxLength: 8,
-              textCapitalization: TextCapitalization.characters,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]'))
-              ],
-              decoration: const InputDecoration(
-                labelText: '輸入 8 碼分享碼',
-                hintText: '例如 A1B2C3D4',
-              ),
-              onSubmitted: (_) => _submit(),
-            ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: _isSubmitting ? null : _submit,
-              style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(50)),
-              child: Text(_isSubmitting ? '加入中...' : '加入旅程'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _submit() async {
-    final code = _codeController.text.trim();
-    final messenger = ScaffoldMessenger.of(context);
-    if (code.isEmpty) {
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(const SnackBar(content: Text('請先輸入分享碼')));
-      return;
-    }
-    if (code.length != 8) {
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(const SnackBar(content: Text('分享碼必須是 8 個字元')));
-      return;
-    }
-
-    setState(() {
-      _isSubmitting = true;
-    });
-
-    try {
-      final result = await TripStore.instance.joinTripByCode(code);
-      if (!mounted) {
-        return;
-      }
-
-      switch (result.status) {
-        case JoinTripByCodeStatus.success:
-          Navigator.of(context).pop(result.trip);
-        case JoinTripByCodeStatus.tripNotFound:
-          messenger.hideCurrentSnackBar();
-          messenger
-              .showSnackBar(const SnackBar(content: Text('查無對應旅程，請確認分享碼')));
-        case JoinTripByCodeStatus.alreadyJoined:
-          messenger.hideCurrentSnackBar();
-          messenger.showSnackBar(const SnackBar(content: Text('這個分享碼已經加入過了')));
-      }
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(content: Text(SupabaseErrorFormatter.userMessage(error))),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
-      }
-    }
   }
 }
 

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:trip_planner_app/core/supabase/supabase_error_formatter.dart';
 import 'package:trip_planner_app/core/theme/app_theme.dart';
 import 'package:trip_planner_app/features/trip_detail/presentation/widgets/day_tab.dart';
+import 'package:trip_planner_app/features/trips/data/invite_member_result.dart';
 import 'package:trip_planner_app/features/trips/data/models/trip_model.dart';
 import 'package:trip_planner_app/features/trips/data/trip_store.dart';
 import 'package:trip_planner_app/features/trips/presentation/widgets/trip_color_picker.dart';
@@ -167,7 +168,7 @@ class _TripDetailScreenState extends State<TripDetailScreen>
                     _TripSummaryCard(
                       trip: trip,
                       tripColor: tripColor,
-                      onCopyShareCode: () => _copyShareCode(context, trip),
+                      onInviteMember: () => _showInviteMemberSheet(context, trip),
                       onOpenNavigation: () =>
                           context.go('/trips/${trip.id}/navigation'),
                     ),
@@ -399,21 +400,13 @@ class _TripDetailScreenState extends State<TripDetailScreen>
         .showSnackBar(const SnackBar(content: Text('退出旅程失敗')));
   }
 
-  Future<void> _copyShareCode(BuildContext context, TripSummary trip) async {
-    final shareCode = trip.shareCode;
-    if (shareCode == null) {
-      return;
-    }
-
-    await Clipboard.setData(ClipboardData(text: shareCode));
-    if (!context.mounted) {
-      return;
-    }
-
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(content: Text('已複製 ${trip.title} 的分享碼：$shareCode')),
+  Future<void> _showInviteMemberSheet(
+      BuildContext context, TripSummary trip) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _InviteMemberSheet(tripId: trip.id),
     );
   }
 }
@@ -520,13 +513,13 @@ class _TripSummaryCard extends StatelessWidget {
   const _TripSummaryCard({
     required this.trip,
     required this.tripColor,
-    required this.onCopyShareCode,
+    required this.onInviteMember,
     required this.onOpenNavigation,
   });
 
   final TripSummary trip;
   final Color tripColor;
-  final VoidCallback onCopyShareCode;
+  final VoidCallback onInviteMember;
   final VoidCallback onOpenNavigation;
 
   @override
@@ -577,11 +570,12 @@ class _TripSummaryCard extends StatelessWidget {
                       : '受邀唯讀模式，可接收時程提醒與地點提醒。',
               },
             ),
-            if (trip.role == TripRole.owner && trip.shareCode != null) ...[
+            if (trip.role == TripRole.owner) ...[
               const SizedBox(height: 16),
-              _ShareCodePanel(
-                shareCode: trip.shareCode!,
-                onCopy: onCopyShareCode,
+              FilledButton.icon(
+                onPressed: onInviteMember,
+                icon: const Icon(Icons.person_add_rounded),
+                label: const Text('邀請成員'),
               ),
             ],
             const SizedBox(height: 16),
@@ -636,89 +630,6 @@ class _TripDayTabBarHeaderDelegate extends SliverPersistentHeaderDelegate {
   }
 }
 
-class _ShareCodePanel extends StatelessWidget {
-  const _ShareCodePanel({required this.shareCode, required this.onCopy});
-
-  final String shareCode;
-  final VoidCallback onCopy;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.82),
-        borderRadius: BorderRadius.circular(22),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final stackVertically = constraints.maxWidth < 520;
-
-          if (stackVertically) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _ShareCodeContent(shareCode: shareCode),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: onCopy,
-                  icon: const Icon(Icons.copy_rounded),
-                  label: const Text('複製'),
-                ),
-              ],
-            );
-          }
-
-          return Row(
-            children: [
-              Expanded(child: _ShareCodeContent(shareCode: shareCode)),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: onCopy,
-                icon: const Icon(Icons.copy_rounded),
-                label: const Text('複製'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _ShareCodeContent extends StatelessWidget {
-  const _ShareCodeContent({required this.shareCode});
-
-  final String shareCode;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '分享碼',
-          style: TextStyle(
-            color: AppColors.accentStrong,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          shareCode,
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 3,
-            color: AppColors.text,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _MiniStat extends StatelessWidget {
   const _MiniStat({required this.value, required this.label});
 
@@ -752,5 +663,170 @@ class _MiniStat extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _InviteMemberSheet extends StatefulWidget {
+  const _InviteMemberSheet({required this.tripId});
+
+  final String tripId;
+
+  @override
+  State<_InviteMemberSheet> createState() => _InviteMemberSheetState();
+}
+
+class _InviteMemberSheetState extends State<_InviteMemberSheet> {
+  final TextEditingController _emailController = TextEditingController();
+  TripPermission _selectedPermission = TripPermission.editor;
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+        decoration: const BoxDecoration(
+          color: Color(0xFFF6FAFF),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('邀請成員', style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 8),
+            const Text('輸入對方的 Email 地址邀請加入行程。'),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.info_outline_rounded,
+                    size: 16, color: Colors.orange.shade700),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '提醒：對方須先登入本應用程式以建立帳號',
+                    style: TextStyle(
+                        fontSize: 13, color: Colors.orange.shade800),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            TextField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
+              decoration: const InputDecoration(
+                labelText: '對方的 Email',
+                hintText: '例如 someone@example.com',
+                prefixIcon: Icon(Icons.email_outlined),
+              ),
+              onSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: 16),
+            Text('權限', style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 8),
+            SegmentedButton<TripPermission>(
+              segments: const [
+                ButtonSegment(
+                  value: TripPermission.editor,
+                  label: Text('可編輯'),
+                  icon: Icon(Icons.edit_outlined),
+                ),
+                ButtonSegment(
+                  value: TripPermission.viewer,
+                  label: Text('僅限查看'),
+                  icon: Icon(Icons.visibility_outlined),
+                ),
+              ],
+              selected: {_selectedPermission},
+              onSelectionChanged: (selection) {
+                if (selection.isNotEmpty) {
+                  setState(() => _selectedPermission = selection.first);
+                }
+              },
+            ),
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: _isSubmitting ? null : _submit,
+              style:
+                  FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+              child: Text(_isSubmitting ? '邀請中...' : '傳送邀請'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submit() async {
+    final email = _emailController.text.trim();
+    final messenger = ScaffoldMessenger.of(context);
+
+    if (email.isEmpty) {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(const SnackBar(content: Text('請輸入對方的 Email')));
+      return;
+    }
+    if (!email.contains('@')) {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(const SnackBar(content: Text('請輸入有效的 Email 格式')));
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final result = await TripStore.instance
+          .inviteMemberByEmail(widget.tripId, email, _selectedPermission);
+      if (!mounted) return;
+
+      switch (result.status) {
+        case InviteMemberStatus.success:
+          Navigator.of(context).pop();
+          messenger.hideCurrentSnackBar();
+          messenger
+              .showSnackBar(SnackBar(content: Text('已成功邀請 $email 加入行程')));
+          return;
+        case InviteMemberStatus.userNotFound:
+          messenger.hideCurrentSnackBar();
+          messenger.showSnackBar(const SnackBar(
+            content: Text('找不到此帳號，請確認對方已登入過本應用程式'),
+          ));
+          return;
+        case InviteMemberStatus.alreadyMember:
+          messenger.hideCurrentSnackBar();
+          messenger.showSnackBar(
+              const SnackBar(content: Text('這位成員已在行程中')));
+          return;
+        case InviteMemberStatus.cannotInviteSelf:
+          messenger.hideCurrentSnackBar();
+          messenger
+              .showSnackBar(const SnackBar(content: Text('無法邀請自己')));
+          return;
+        case InviteMemberStatus.notOwner:
+        case InviteMemberStatus.invalidPermission:
+          messenger.hideCurrentSnackBar();
+          messenger.showSnackBar(
+              const SnackBar(content: Text('邀請失敗，請稍後再試')));
+          return;
+      }
+    } catch (error) {
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(content: Text(SupabaseErrorFormatter.userMessage(error))),
+      );
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 }
