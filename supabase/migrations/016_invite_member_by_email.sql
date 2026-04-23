@@ -82,6 +82,11 @@ begin
     return jsonb_build_object('status', 'not_owner');
   end if;
 
+  if normalised = '' then
+    raise exception 'Email address cannot be empty.'
+      using errcode = '22023';
+  end if;
+
   -- Serialize invite attempts per owner so the count-and-insert check is atomic.
   lock_bytes := uuid_send(caller_id);
   lock_key_1 :=
@@ -106,13 +111,8 @@ begin
 
   if recent_attempts >= 20 then
     -- Match join_trip_by_code's retry-later rate-limit signal.
-    raise exception 'Too many invite attempts. Please wait an hour before trying again.'
+    raise exception 'Too many invite attempts. Please wait before trying again.'
       using errcode = '53400';
-  end if;
-
-  if normalised = '' then
-    raise exception 'Email address cannot be empty.'
-      using errcode = '22023';
   end if;
 
   insert into public.invite_member_attempts (user_id) values (caller_id);
