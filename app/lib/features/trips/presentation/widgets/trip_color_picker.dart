@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart' as fcp;
 import 'package:trip_planner_app/core/theme/app_theme.dart';
 
@@ -67,43 +68,113 @@ class TripColorPicker extends StatelessWidget {
   }
 
   Future<void> _showColorPickerDialog(BuildContext context) async {
-    final initialColor = colorFromHex(selectedColor, fallback: TripColors.presets.first.color);
-    Color pickedColor = initialColor;
+    final initialColor =
+        colorFromHex(selectedColor, fallback: TripColors.presets.first.color);
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showDialog<_ColorPickerResult>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('選擇自訂顏色'),
-        contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-        content: SingleChildScrollView(
-          child: fcp.ColorPicker(
-            pickerColor: pickedColor,
-            onColorChanged: (color) => pickedColor = color,
-            colorPickerWidth: 280,
-            pickerAreaHeightPercent: 0.7,
-            enableAlpha: false,
-            labelTypes: const [],
-            displayThumbColor: true,
-            paletteType: fcp.PaletteType.hsvWithHue,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('確認'),
-          ),
-        ],
-      ),
+      builder: (dialogContext) {
+        Color pickedColor = initialColor;
+        final hexController = TextEditingController(
+          text: hexFromColor(initialColor).replaceFirst('#', ''),
+        );
+        String? hexError;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('選擇自訂顏色'),
+              contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    fcp.ColorPicker(
+                      pickerColor: pickedColor,
+                      onColorChanged: (color) {
+                        pickedColor = color;
+                        hexController.text =
+                            hexFromColor(color).replaceFirst('#', '');
+                        setDialogState(() => hexError = null);
+                      },
+                      colorPickerWidth: 280,
+                      pickerAreaHeightPercent: 0.7,
+                      enableAlpha: false,
+                      labelTypes: const [],
+                      displayThumbColor: true,
+                      paletteType: fcp.PaletteType.hsvWithHue,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: hexController,
+                      decoration: InputDecoration(
+                        prefixText: '#',
+                        labelText: '輸入色碼',
+                        hintText: 'RRGGBB',
+                        errorText: hexError,
+                        counterText: '',
+                      ),
+                      maxLength: 6,
+                      maxLengthEnforcement: MaxLengthEnforcement.enforced,
+                      textCapitalization: TextCapitalization.characters,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'[0-9A-Fa-f]'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value.length == 6) {
+                          final parsed = colorFromHex('#$value');
+                          setDialogState(() {
+                            pickedColor = parsed;
+                            hexError = null;
+                          });
+                        } else {
+                          setDialogState(() => hexError = null);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () =>
+                      Navigator.of(dialogContext).pop(null),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final hexText = hexController.text;
+                    if (hexText.length != 6) {
+                      setDialogState(
+                        () => hexError = '請輸入完整的 6 位色碼',
+                      );
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop(
+                      _ColorPickerResult(color: pickedColor),
+                    );
+                  },
+                  child: const Text('確認'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
 
-    if (confirmed == true) {
-      onColorChanged(hexFromColor(pickedColor));
+    if (confirmed != null) {
+      onColorChanged(hexFromColor(confirmed.color));
     }
   }
+}
+
+class _ColorPickerResult {
+  const _ColorPickerResult({required this.color});
+  final Color color;
 }
 
 class _DefaultColorOption extends StatelessWidget {
