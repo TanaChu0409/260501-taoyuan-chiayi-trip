@@ -83,6 +83,7 @@ begin
   end if;
 
   if normalised = '' then
+    -- Use invalid_parameter_value for caller-supplied input validation failure.
     raise exception 'Email address cannot be empty or contain only whitespace.'
       using errcode = '22023';
   end if;
