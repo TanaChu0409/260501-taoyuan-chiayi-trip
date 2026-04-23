@@ -570,7 +570,7 @@ class _TripSummaryCard extends StatelessWidget {
                       : '受邀唯讀模式，可接收時程提醒與地點提醒。',
               },
             ),
-            if (trip.role == TripRole.owner) ...[  
+            if (trip.role == TripRole.owner) ...[
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed: onInviteMember,
@@ -749,7 +749,9 @@ class _InviteMemberSheetState extends State<_InviteMemberSheet> {
               ],
               selected: {_selectedPermission},
               onSelectionChanged: (selection) {
-                setState(() => _selectedPermission = selection.first);
+                if (selection.isNotEmpty) {
+                  setState(() => _selectedPermission = selection.first);
+                }
               },
             ),
             const SizedBox(height: 20),

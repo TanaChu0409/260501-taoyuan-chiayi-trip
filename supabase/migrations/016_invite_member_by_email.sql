@@ -13,6 +13,34 @@
 --   'cannot_invite_self' – Owner is trying to invite themselves.
 --   'already_member'     – Invitee already has a shared_access row for this trip.
 
+create table if not exists public.invite_member_attempts (
+  id           uuid        primary key default gen_random_uuid(),
+  user_id      uuid        not null references auth.users(id) on delete cascade,
+  attempted_at timestamptz not null default now()
+);
+
+create index if not exists idx_invite_member_attempts_user_time
+  on public.invite_member_attempts(user_id, attempted_at);
+
+alter table public.invite_member_attempts enable row level security;
+-- No direct client access needed; only the SECURITY DEFINER function writes to it.
+
+-- Purge attempts older than 24 hours to keep the table small.
+-- Schedule `select public.purge_invite_member_attempts();` on an interval (for
+-- example, hourly) to enforce retention.
+create or replace function public.purge_invite_member_attempts()
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  delete from public.invite_member_attempts
+  where attempted_at < now() - interval '24 hours';
+$$;
+
+revoke all on function public.purge_invite_member_attempts() from public;
+grant execute on function public.purge_invite_member_attempts() to service_role;
+
 create or replace function public.invite_member_by_email(
   p_trip_id    uuid,
   p_email      text,
@@ -28,6 +56,10 @@ declare
   normalised    text := lower(trim(coalesce(p_email, '')));
   invitee_id    uuid;
   trip_owner_id uuid;
+  recent_attempts integer;
+  lock_bytes     bytea;
+  lock_key_1     integer;
+  lock_key_2     integer;
 begin
   -- Must be authenticated.
   if caller_id is null then
@@ -49,6 +81,38 @@ begin
   if trip_owner_id is null or trip_owner_id <> caller_id then
     return jsonb_build_object('status', 'not_owner');
   end if;
+
+  -- Serialize invite attempts per owner so the count-and-insert check is atomic.
+  lock_bytes := uuid_send(caller_id);
+  lock_key_1 :=
+      (get_byte(lock_bytes, 0) << 24)
+    + (get_byte(lock_bytes, 1) << 16)
+    + (get_byte(lock_bytes, 2) << 8)
+    + get_byte(lock_bytes, 3);
+  lock_key_2 :=
+      (get_byte(lock_bytes, 4) << 24)
+    + (get_byte(lock_bytes, 5) << 16)
+    + (get_byte(lock_bytes, 6) << 8)
+    + get_byte(lock_bytes, 7);
+
+  perform pg_advisory_xact_lock(lock_key_1, lock_key_2);
+
+  -- Rate limit: at most 20 invite attempts per owner per hour before querying auth.users.
+  select count(*) into recent_attempts
+  from public.invite_member_attempts
+  where user_id = caller_id
+    and attempted_at > now() - interval '1 hour';
+
+  if recent_attempts >= 20 then
+    raise exception 'Too many invite attempts. Please wait before trying again.'
+      using errcode = '53400';
+  end if;
+
+  if normalised = '' then
+    return jsonb_build_object('status', 'user_not_found');
+  end if;
+
+  insert into public.invite_member_attempts (user_id) values (caller_id);
 
   -- Look up the invitee in auth.users by (normalised) email.
   -- auth.users is only accessible to SECURITY DEFINER functions.
