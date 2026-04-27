@@ -11,6 +11,7 @@ class StopPhotoService {
   static final StopPhotoService instance = StopPhotoService._();
 
   static const _bucket = 'stop-photos';
+  static const _signedUrlExpirySeconds = 60 * 60;
   static const int maxPhotos = 4;
 
   SupabaseClient get _client => Supabase.instance.client;
@@ -54,6 +55,8 @@ class StopPhotoService {
       return buildPhotoFromRow(Map<String, dynamic>.from(row));
     } catch (_) {
       try {
+        // Ignore cleanup failures because the original insert error is the
+        // actionable failure for the caller.
         await _client.storage.from(_bucket).remove([storagePath]);
       } catch (_) {}
       rethrow;
@@ -109,7 +112,7 @@ class StopPhotoService {
     final storagePath = row['storage_path'] as String? ?? '';
     final signedUrl = await _client.storage
         .from(_bucket)
-        .createSignedUrl(storagePath, 60 * 60);
+        .createSignedUrl(storagePath, _signedUrlExpirySeconds);
     return StopPhoto.fromJson(row, publicUrl: signedUrl);
   }
 

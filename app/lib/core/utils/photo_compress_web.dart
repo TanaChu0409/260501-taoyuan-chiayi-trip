@@ -14,7 +14,7 @@ Future<List<int>> compressToJpeg(
 }) async {
   final decoded = img.decodeImage(bytes);
   if (decoded == null) {
-    throw StateError('不支援的圖片格式，請改用 JPEG、PNG 或 WebP。');
+    throw ArgumentError('不支援的圖片格式，請改用 JPEG、PNG 或 WebP。');
   }
 
   img.Image resized;

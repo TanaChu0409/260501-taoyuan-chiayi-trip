@@ -501,10 +501,12 @@ class _StopFormScreenState extends State<StopFormScreen> {
             _photoService.deletePhoto(photo),
         ]);
 
-        final nextSortOrder = _existingPhotos.fold<int>(
-          -1,
-          (highest, photo) => photo.sortOrder > highest ? photo.sortOrder : highest,
-        );
+        final nextSortOrderBase = _existingPhotos.isEmpty
+            ? 0
+            : _existingPhotos
+                    .map((photo) => photo.sortOrder)
+                    .reduce((left, right) => left > right ? left : right) +
+                1;
         final uploadedPhotos = await Future.wait([
           for (var index = 0; index < _pendingPhotos.length; index += 1)
             () {
@@ -512,7 +514,7 @@ class _StopFormScreenState extends State<StopFormScreen> {
               return _photoService.compressAndUpload(
                 stopId: savedStopId,
                 tripId: widget.tripId,
-                sortOrder: nextSortOrder + index + 1,
+                sortOrder: nextSortOrderBase + index,
                 bytes: pending.bytes,
               );
             }(),
